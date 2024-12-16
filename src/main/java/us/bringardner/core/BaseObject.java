@@ -93,8 +93,13 @@ public class BaseObject {
 	 * @return the propertyPrefix for this Object
 	 * @see #getProperty(String)
 	 * @see #getProperty(String, String)
+	 * @See {@link #isSupportPrefixProperty()}
 	 */
 	protected String getPropertyPrefix() {
+		if( !isSupportPrefixProperty()) {
+			return null;
+		}
+		
 		if( propertyPrefix == null ) {
 			synchronized (this) {
 				if( propertyPrefix == null ) {
@@ -113,6 +118,7 @@ public class BaseObject {
 	 * @param propertyPrefix
 	 * @see BaseObject#getProperty(String)
 	 * @see #getProperty(String, String)
+	 * @See {@link #isSupportPrefixProperty()}
 	 */
 	protected void setPropertyPrefix(String propertyPrefix) {
 		this.propertyPrefix = propertyPrefix;
