@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<project name="BjlCore">
+  <bannerLeft>
+    <name>Bringardner Java Library (BjlCore)</name>
+    <src>images/Globe-128.png</src>
+    <href>http://bjl.bringardner.us/BJL/</href>
+  </bannerLeft>
+  <bannerRight>
+  
+  <name>Bringardner Java Library</name>
+  <href>http://bjl.bringardner.com/BJL/</href>
+  </bannerRight>
+  <body>
+    <links>
+      <item name="BJL" href="http://bjl.bringardner.us/BJL/" />      
+    </links>
+    <menu name="Bringardner Java Library">
+      <item name="Introduction" href="index.html"/>
+      <item name="Download" href="download.html"/>
+      <item name="General Information" href="about.html"/>
+    </menu>
+
+    <menu ref="reports"/>
+  </body>
+</project>

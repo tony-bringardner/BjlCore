@@ -1,0 +1,137 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<artifactId>bjl_core</artifactId>
+	<name>Bringardner Java Library Core</name>
+	<groupId>us.bringardner</groupId>
+	<version>0.1.0</version>
+
+	<description>This project holds the Core (or Common) components that are used by
+		most if not all other projects in the Bringardner Java Library as well as some utility
+		classes that have frequent references from other packages. The main
+		objective of these classes is to provide basic functionality such as
+		logging with a minimum of external dependencies. </description>
+
+	<build>
+		<!-- <sourceDirectory>src</sourceDirectory> -->
+		<pluginManagement>
+			<plugins>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-compiler-plugin</artifactId>
+					<version>3.3</version>
+					<configuration>
+						<source>9</source>
+						<target>9</target>
+					</configuration>
+				</plugin>
+
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-source-plugin</artifactId>
+					<version>3.1.0</version>
+					<executions>
+						<execution>
+							<id>attach-sources</id>
+							<goals>
+								<goal>jar</goal>
+							</goals>
+						</execution>
+					</executions>
+				</plugin>
+				<plugin>
+					<artifactId>maven-deploy-plugin</artifactId>
+					<version>2.8.2</version>
+					<!--
+					<configuration>
+					
+						 
+						https://www.baeldung.com/maven-repo-github
+					
+						<altDeploymentRepository>
+							internal.repo::default::file://${project.build.directory}/mvn-artifact
+						</altDeploymentRepository>
+					</configuration>
+					-->
+				</plugin>
+				<plugin>
+					<groupId>com.github.github</groupId>
+					<artifactId>site-maven-plugin</artifactId>
+					<version>0.12</version>
+					<configuration>
+						<message>Maven artifacts for ${project.version}</message>
+						<noJekyll>true</noJekyll>
+						<outputDirectory>${project.build.directory}</outputDirectory>
+						<branch>refs/heads/${branch-name}</branch>
+						<includes>
+							<include>**/*</include>
+						</includes>
+						<merge>true</merge>
+						<repositoryName>BjlCore</repositoryName>
+						<repositoryOwner>tony-bringardner</repositoryOwner>
+						<server>github</server>
+					</configuration>
+					<executions>
+						<execution>
+							<goals>
+								<goal>site</goal>
+							</goals>
+							<phase>deploy</phase>
+						</execution>
+					</executions>
+				</plugin>
+
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-surefire-plugin</artifactId>
+					<version>3.5.2</version>
+					<configuration>
+						<test><!-- your test suite class name should be here -->
+						</test>
+					</configuration>
+				</plugin>
+			</plugins>
+		</pluginManagement>
+	</build>
+
+	<distributionManagement>
+		<repository>
+			<id>github</id>
+			<name>tony-bringardner</name>
+			<url>https://maven.pkg.github.com/tony-bringardner/BjlCore</url>
+		</repository>
+
+	</distributionManagement>
+
+	<url>http://bringardner.us/BJL/BjlCore</url>
+	<inceptionYear>1998</inceptionYear>
+
+	<dependencies>
+
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-api</artifactId>
+			<version>2.13.2</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-core</artifactId>
+			<version>2.13.2</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-engine</artifactId>
+			<version>5.9.1</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.junit.platform</groupId>
+			<artifactId>junit-platform-suite-engine</artifactId>
+			<version>1.9.1</version>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+</project>
