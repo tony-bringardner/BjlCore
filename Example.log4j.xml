@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE log4j:configuration SYSTEM "log4j.dtd">
+<!-- 
+
+	A sample / minimal configuration for log4j 
+
+   Copyright 1998-2009 Tony Bringardner
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.   
+-->
+
+<log4j:configuration xmlns:log4j="http://jakarta.apache.org/log4j/">
+
+  <appender name="file" class="org.apache.log4j.RollingFileAppender">
+  	<param name="File" value="common.log" /> 
+	<param name="Append" value="true" /> 
+  	<param name="MaxFileSize" value="50MB" /> 
+  	<param name="MaxBackupIndex" value="0" /> 
+	<layout class="org.apache.log4j.PatternLayout">
+  		<param name="ConversionPattern" value="%d %-5p %c{1} - %m%n" /> 
+  	</layout>
+  </appender>
+
+  
+ 	<appender name="std.out" class="org.apache.log4j.ConsoleAppender">
+		<param name="Target" value="System.out"/>
+		<layout class="org.apache.log4j.PatternLayout">
+			<param name="ConversionPattern" value="%d{HH:mm:ss:SSS} %-5p %c{1} - %m%n"/>
+		</layout>
+		<filter class="org.apache.log4j.varia.LevelRangeFilter">
+			<param name="LevelMin" value="debug"/>
+			<param name="LevelMax" value="info"/>
+			<param name="LevelMax" value="warn"/>
+			<param name="AcceptOnMatch" value="true"/>
+		</filter>
+		<filter class="org.apache.log4j.varia.DenyAllFilter"/>
+	</appender>
+	
+	<appender name="std.err" class="org.apache.log4j.ConsoleAppender">
+		<param name="Target" value="System.err"/>
+		<layout class="org.apache.log4j.PatternLayout">
+			<param name="ConversionPattern" value="%d{HH:mm:ss:SSS} %-5p %c{1} - %m%n"/>
+		</layout>
+		<filter class="org.apache.log4j.varia.LevelRangeFilter">
+			<param name="LevelMin" value="error"/>
+			<param name="LevelMax" value="fatal"/>
+			<param name="AcceptOnMatch" value="true"/>
+		</filter>
+		<filter class="org.apache.log4j.varia.DenyAllFilter"/>
+	</appender>
+
+	<root>
+		<level value="debug"/>
+		<appender-ref ref="std.out"/>
+		<appender-ref ref="std.err"/>
+	</root>
+</log4j:configuration>
