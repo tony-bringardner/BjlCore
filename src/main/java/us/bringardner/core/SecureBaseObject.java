@@ -225,7 +225,7 @@ public class SecureBaseObject extends BaseObject {
 						kmf.init(ks, passphrase);
 						keyManagers = kmf.getKeyManagers();
 					} else {
-						logDebug("No password defined. No KeyManagers availible (may be aokay for a clinet).");
+						logDebug("No password defined. No KeyManagers availible (may be okay for a clinet).");
 					}
 				}
 			}
