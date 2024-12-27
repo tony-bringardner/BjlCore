@@ -60,6 +60,7 @@ public class SecureBaseObject extends BaseObject {
 	public static final String PROPERTY_PROTOCOL = "Protocol";
 	public static final String PROPERTY_SECURE = "secure";
 	public static final String PROTOCOL_TLS = "TLS";	
+	//  This is used to FORCE java to use Some something besides TSLv1.3 as some clients don't support it
 	public static final String PROPERTY_FORCE_TLS_VERSION = "ForceTlsVersion";
 
 	private static TrustManager [] defaultTrustManagers = null;
