@@ -98,10 +98,10 @@ public class SearchableClassLoader extends URLClassLoader {
 						ret = loadClass(name);
 					}
 				} catch (Throwable e) {		
-					System.out.println(e);
+				//	System.out.println(e);
 				}
 			} catch (Exception e) {
-				System.out.println(e);
+				//System.out.println(e);
 			}
 		}
 		return ret;
