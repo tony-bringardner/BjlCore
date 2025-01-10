@@ -80,7 +80,7 @@ public class SearchableClassLoader extends URLClassLoader {
 		return ret;
 	}
 
-	static Class<?> findFromPath(String path) {
+	Class<?> findFromPath(String path) {
 		Class<?> ret = null;
 		String []parts = path.split("[/]");
 		StringBuilder className = new StringBuilder();
@@ -95,11 +95,13 @@ public class SearchableClassLoader extends URLClassLoader {
 					String name = className.toString();
 					//  this prevents an annoying error message
 					if(! name.endsWith("MulticastDnsAdvertiser")) {
-						ret = Class.forName(className.toString());		
+						ret = loadClass(name);
 					}
-				} catch (Throwable e) {				
+				} catch (Throwable e) {		
+					System.out.println(e);
 				}
 			} catch (Exception e) {
+				System.out.println(e);
 			}
 		}
 		return ret;
