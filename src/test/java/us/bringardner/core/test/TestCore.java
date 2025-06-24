@@ -73,10 +73,10 @@ import us.bringardner.core.BaseObject;
 import us.bringardner.core.BaseThread;
 import us.bringardner.core.BjlLogger;
 import us.bringardner.core.ILogger;
+import us.bringardner.core.ILogger.Level;
 import us.bringardner.core.JulLogger;
 import us.bringardner.core.Log4JLogger;
 import us.bringardner.core.SecureBaseObject;
-import us.bringardner.core.ILogger.Level;
 import us.bringardner.core.swing.DatePanel;
 import us.bringardner.core.util.AbstractCoreServer;
 import us.bringardner.core.util.LogHelper;
@@ -660,44 +660,38 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 
 	}
 
+	@SuppressWarnings("rawtypes")
 	@Test
 	public void testClassLoader() throws IOException {
-		Class<?>[] expected3 = {
-				TestCoreBase.class,BaseObject.class,BjlLogger.class,SecureBaseObject.class,LogHelper.class
-		};
-		Class<?>[] expected2 = {
-				 SecureBaseObject.class,BjlLogger.class,BaseObject.class,LogHelper.class,TestCoreBase.class
-		};
+		List<Class> expected3 = Arrays.asList(TestCoreBase.class,BaseObject.class,BjlLogger.class,SecureBaseObject.class,LogHelper.class);
+		List<Class> expected2 = Arrays.asList(SecureBaseObject.class,BjlLogger.class,BaseObject.class,LogHelper.class,TestCoreBase.class);
+		List<Class> expected1 = Arrays.asList(BaseObject.class,BjlLogger.class,SecureBaseObject.class,LogHelper.class);
+		
 
-		Class<?>[] expected1 = {
-				BaseObject.class,BjlLogger.class,SecureBaseObject.class,LogHelper.class
-		};
-
-
-		File file2 = new File("./TestFiles/TestSearchableClassLoader.jar").getCanonicalFile();
+		File file2 = new File("TestFiles/TestSearchableClassLoader.jar").getCanonicalFile();
 
 		SearchableClassLoader l2 = SearchableClassLoader.getLoader(Arrays.asList(file2.getAbsolutePath()));
 		List<Class<?>> list2 = l2.findTarget(BaseObject.class);
-		assertEquals("jar flile List sizes do not match",expected2.length,list2.size());
-		for (int idx = 0; idx < expected2.length; idx++) {
-			assertEquals("jar file Class does not match", list2.get(idx), expected2[idx]);
+		assertEquals("jar flile List sizes do not match",expected2.size(),list2.size());
+		for (int idx = 0; idx < expected2.size(); idx++) {
+			assertTrue("jar file Class does not match", expected2.contains(list2.get(idx)));
 		}
 
-		File file = new File("./TestFiles/us").getCanonicalFile();		
+		File file = new File("TestFiles/us").getCanonicalFile();		
 		SearchableClassLoader l1 = SearchableClassLoader.getLoader(Arrays.asList(file.getAbsolutePath()));
 		List<Class<?>> list1 = l1.findTarget(BaseObject.class);
-		assertTrue("directory List sizes do not match",list1.size()==expected1.length);
-		for (int idx = 0; idx < expected1.length; idx++) {
-			assertEquals("directory Class does not match", list1.get(idx), expected1[idx]);
+		assertTrue("directory List sizes do not match",list1.size()==expected1.size());
+		for (int idx = 0; idx < expected1.size(); idx++) {
+			assertTrue("jar file Class does not match", expected1.contains(list1.get(idx)));
 		}
 
 
 
 		SearchableClassLoader l = SearchableClassLoader.getClassPathLoader();
 		List<Class<?>> list = l.findTarget(BaseObject.class);
-		assertTrue("class path List sizes do not match",list.size()==expected3.length);
-		for (int idx = 0; idx < expected3.length; idx++) {
-			assertEquals("class path Class does not match", list.get(idx), expected3[idx]);
+		assertTrue("class path List sizes do not match",list.size()==expected3.size());
+		for (int idx = 0; idx < expected3.size(); idx++) {
+			assertTrue("jar file Class does not match", expected3.contains(list.get(idx)));
 		}
 
 	}

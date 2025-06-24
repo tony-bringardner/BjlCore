@@ -82,7 +82,12 @@ public class SearchableClassLoader extends URLClassLoader {
 
 	Class<?> findFromPath(String path) {
 		Class<?> ret = null;
-		String []parts = path.split("[/]");
+		char sep = File.separatorChar;
+		String rx = "["+sep+"]";
+		if( sep == '\\') {
+			rx = "[\\\\]";
+		}
+		String []parts = path.split(rx);
 		StringBuilder className = new StringBuilder();
 
 		for(int idx=parts.length-1;ret == null && idx >=0; idx--) {

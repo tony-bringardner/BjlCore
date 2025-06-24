@@ -35,13 +35,14 @@ public abstract class BaseThread extends SecureBaseObject implements Runnable {
 	protected boolean running;
 	protected boolean stopping;
 	protected boolean started=false;
+	protected Thread thread;
 	
 	private String name;
 	private boolean daemon=true;
 	private int priority = -1;
 	private boolean stopOnError = false;
 	
-	private Thread thread;
+	
 	private int errorSleepTime = DEFAULT_ERROR_SLEEP_TIME;
 
 	private ClassLoader contextClassLoader;
