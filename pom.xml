@@ -5,7 +5,7 @@
 	<artifactId>bjl_core</artifactId>
 	<name>Bringardner Java Library Core</name>
 	<groupId>us.bringardner</groupId>
-	<version>0.1.0</version>
+	<version>0.1.1</version>
 
 	<description>This project holds the Core (or Common) components that are
 		used by
@@ -24,8 +24,8 @@
 					<artifactId>maven-compiler-plugin</artifactId>
 					<version>3.3</version>
 					<configuration>
-						<source>9</source>
-						<target>9</target>
+						<source>11</source>
+						<target>11</target>
 					</configuration>
 				</plugin>
 

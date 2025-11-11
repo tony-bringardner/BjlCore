@@ -73,10 +73,10 @@ import us.bringardner.core.BaseObject;
 import us.bringardner.core.BaseThread;
 import us.bringardner.core.BjlLogger;
 import us.bringardner.core.ILogger;
+import us.bringardner.core.ILogger.Level;
 import us.bringardner.core.JulLogger;
 import us.bringardner.core.Log4JLogger;
 import us.bringardner.core.SecureBaseObject;
-import us.bringardner.core.ILogger.Level;
 import us.bringardner.core.swing.DatePanel;
 import us.bringardner.core.util.AbstractCoreServer;
 import us.bringardner.core.util.LogHelper;
@@ -520,7 +520,7 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 		PrintStream out = System.out;		
 		ByteArrayOutputStream bo = new ByteArrayOutputStream();
 		System.setOut(new PrintStream(bo));
-
+		
 		/*
 		PrintStream err = System.err;
 		ByteArrayOutputStream be = new ByteArrayOutputStream();
@@ -580,6 +580,9 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 			String e [] = elines[lidx].split("[ ]");
 			String a [] = alines[lidx].split("[ ]");
 
+			if( e.length != a.length) {
+				System.out.println("Here");
+			}
 			assertEquals("Length of results don't match on line "+lidx,e.length, a.length);
 
 			for (int idx = 0; idx < a.length; idx++) {
@@ -647,10 +650,10 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 	@Test
 	public void testLog4JLogger() {
 		Log4JLogger test = new Log4JLogger();
-
+		
 		test.init(getClass().getName());
-		runTests(test,ILogger.Level.NONE);
 		runTests(test,ILogger.Level.ERROR);
+		runTests(test,ILogger.Level.NONE);		
 		runTests(test,ILogger.Level.INFO);
 		runTests(test,ILogger.Level.WARN);
 		runTests(test,ILogger.Level.DEBUG);
@@ -1057,8 +1060,8 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 
 		Process p = pb.start();
 		try {
-			int i = p.waitFor();
-			System.out.println("i="+i);
+			p.waitFor();
+			//System.out.println("i="+i);
 		} catch (InterruptedException e) {
 			throw new IOException(e);
 		}
