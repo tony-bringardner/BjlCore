@@ -5,7 +5,7 @@
 	<artifactId>bjl_core</artifactId>
 	<name>Bringardner Java Library Core</name>
 	<groupId>us.bringardner</groupId>
-	<version>0.2.1</version>
+	<version>0.1.2</version>
 
 	<description>This project holds the Core (or Common) components that are
 		used by
