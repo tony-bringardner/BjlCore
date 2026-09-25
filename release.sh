@@ -3,9 +3,13 @@
 # release.sh - publish the version currently in pom.xml to GitHub Packages
 #              and record the release in git.
 #
-# Usage:  ./release.sh            (asks for confirmation)
-#         ./release.sh -y         (no confirmation prompt)
-#         ./release.sh -n         (dry run: show what would be done)
+# Works on the project you run it from, so one copy (e.g. in ~/bin) serves every project.
+#
+# Usage:  release.sh [-y] [-n] [project-dir]
+#         release.sh              release the project in the current directory (asks first)
+#         release.sh -y           no confirmation prompt
+#         release.sh -n           dry run: show what would be done
+#         release.sh ~/git/Proj   release the project in that directory
 #
 # Steps:
 #   1. Read the version from pom.xml
@@ -34,6 +38,8 @@ while getopts "ynh" opt; do
 		*) usage 1 ;;
 	esac
 done
+shift $((OPTIND - 1))
+PROJECT_DIR="${1:-.}"
 
 die()  { echo "ERROR: $*" >&2; exit 1; }
 info() { echo "==> $*"; }
@@ -45,13 +51,38 @@ run()  {
 	fi
 }
 
-# Always run from the directory that holds this script (the project root)
-cd "$(dirname "$0")"
-
 command -v mvn >/dev/null 2>&1 || die "mvn is not on the PATH (see ~/.zshrc / Homebrew setup)."
 command -v git >/dev/null 2>&1 || die "git is not on the PATH."
-[[ -f pom.xml ]] || die "pom.xml not found in $(pwd)"
-git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "$(pwd) is not a git repository."
+
+# Work on the project in PROJECT_DIR (default: the current directory), starting from the
+# top of its git repository, so this works from any subfolder of the project.
+[[ -d "$PROJECT_DIR" ]] || die "$PROJECT_DIR is not a directory."
+cd "$PROJECT_DIR"
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" \
+	|| die "$(pwd) is not in a git repository. Run release.sh from inside a project."
+cd "$ROOT"
+[[ -f pom.xml ]] || die "pom.xml not found in $ROOT"
+
+# Read a top-level value (groupId, artifactId, version) of THIS project from pom.xml,
+# ignoring the same tags inside <parent>, <dependencies>, <build>, etc.
+pom_value() {
+	local t args=(-e 's/<!--.*-->//g' -e '/<!--/,/-->/d')   # comments (one-line, then multi-line)
+	for t in parent dependencies dependencyManagement build profiles reporting \
+	         distributionManagement repositories pluginRepositories; do
+		# remove the section when it is on one line, otherwise from its start line to its end line
+		args+=(-e "s:<$t>.*</$t>::g" -e "/<$t>/,/<\\/$t>/d")
+	done
+	sed "${args[@]}" pom.xml \
+	| sed -n "s:.*<$1>[[:space:]]*\\([^<[:space:]]*\\)[[:space:]]*</$1>.*:\\1:p" \
+	| head -1
+}
+
+# The same value from the <parent> section (used when the project inherits it).
+parent_value() {
+	sed -n '/<parent>/,/<\/parent>/p' pom.xml \
+	| sed -n "s:.*<$1>[[:space:]]*\([^<[:space:]]*\)[[:space:]]*</$1>.*:\1:p" \
+	| head -1
+}
 
 # ---------------------------------------------------------------------------
 # 1. Version from pom.xml
@@ -61,15 +92,14 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "$(pwd) is not a git 
 # ---------------------------------------------------------------------------
 VERSION="$(mvn -q -DforceStdout help:evaluate -Dexpression=project.version 2>/dev/null || true)"
 if [[ -z "$VERSION" || "$VERSION" == *"ERROR"* || "$VERSION" == *" "* ]]; then
-	VERSION="$(sed -e '/<parent>/,/<\/parent>/d' pom.xml \
-		| sed -n 's:.*<version>[[:space:]]*\([^<[:space:]]*\)[[:space:]]*</version>.*:\1:p' \
-		| head -1)"
+	VERSION="$(pom_value version)"
+	[[ -n "$VERSION" ]] || VERSION="$(parent_value version)"
 fi
 [[ -n "$VERSION" ]] || die "Could not read the project version from pom.xml"
 
-ARTIFACT="$(sed -e '/<parent>/,/<\/parent>/d' pom.xml \
-	| sed -n 's:.*<artifactId>[[:space:]]*\([^<[:space:]]*\)[[:space:]]*</artifactId>.*:\1:p' \
-	| head -1)"
+ARTIFACT="$(pom_value artifactId)"
+GROUP="$(pom_value groupId)"
+[[ -n "$GROUP" ]] || GROUP="$(parent_value groupId)"
 TAG="v${VERSION}"
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
@@ -105,7 +135,8 @@ fi
 CHANGES="$(git status --porcelain --untracked-files=no)"
 
 echo
-echo "  Artifact : us.bringardner:${ARTIFACT:-?}:${VERSION}"
+echo "  Project  : $ROOT"
+echo "  Artifact : ${GROUP:-?}:${ARTIFACT:-?}:${VERSION}"
 echo "  Branch   : $BRANCH  ->  $REMOTE"
 if $SNAPSHOT; then
 	echo "  Tag      : (none - SNAPSHOT versions are not tagged)"
