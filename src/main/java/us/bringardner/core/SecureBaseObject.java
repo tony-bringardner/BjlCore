@@ -63,7 +63,7 @@ public class SecureBaseObject extends BaseObject {
 	//  This is used to FORCE java to use Some something besides TSLv1.3 as some clients don't support it
 	public static final String PROPERTY_FORCE_TLS_VERSION = "ForceTlsVersion";
 
-	private static TrustManager [] defaultTrustManagers = null;
+	private static volatile TrustManager [] defaultTrustManagers = null;
 
 
 	public static TrustManager[] getDefaultTrustManagers() {
@@ -77,25 +77,26 @@ public class SecureBaseObject extends BaseObject {
 	/**
 	 * File name of the KeyStore
 	 */
-	private String keyStoreFileName;
+	private volatile String keyStoreFileName;
 	/**
 	 * Example JKS,PKCS12
 	 */
-	private String keyStoreType;
+	private volatile String keyStoreType;
 
 	/**
 	 * Example SunX509
 	 */
-	private String algorithm;
+	private volatile String algorithm;
 
 	/**
 	 * Example TLS,SSL
 	 */
-	private String protocol;
+	private volatile String protocol;
 
-	private String keyStorePassword;
+	private volatile String keyStorePassword;
 
-	private boolean secure;
+	//  null means "not configured yet", the 'secure' property is read the first time isSecure() is called.
+	private volatile Boolean secure;
 
 	private volatile KeyStore keyStore;
 
@@ -109,7 +110,12 @@ public class SecureBaseObject extends BaseObject {
 	 * @return true if Object represent a secure connection.  Otherwise, false.
 	 */
 	public boolean isSecure() {		
-		return secure;
+		Boolean ret = secure;
+		if( ret == null ) {
+			ret = getBooleanProperty(PROPERTY_SECURE, false);
+			secure = ret;
+		}
+		return ret;
 	}
 
 	/**
@@ -118,6 +124,17 @@ public class SecureBaseObject extends BaseObject {
 	 */
 	public void setSecure(boolean secure) {
 		this.secure = secure;
+		resetSecurityContext();
+	}
+
+	/**
+	 * Called when any part of the security configuration changes so that objects 
+	 * built from the old configuration (the SSLContext, socket factories) are re-created on next use.
+	 * Subclasses that cache objects built from the SSLContext should override this 
+	 * (and call super.resetSecurityContext()).
+	 */
+	protected void resetSecurityContext() {
+		sslContext = null;
 	}
 
 
@@ -129,7 +146,7 @@ public class SecureBaseObject extends BaseObject {
 		String tmp = null;
 
 		if( (tmp = getProperty(PROPERTY_SECURE)) != null ) {
-			secure = tmp.toLowerCase().equals("true");
+			secure = tmp.trim().equalsIgnoreCase("true");
 		}
 
 	}
@@ -171,6 +188,7 @@ public class SecureBaseObject extends BaseObject {
 	 * @param context
 	 */
 	public void setSSLContext(SSLContext context) {
+		resetSecurityContext();
 		this.sslContext = context;
 	}
 
@@ -189,6 +207,7 @@ public class SecureBaseObject extends BaseObject {
 	 */
 	public void setSecureRandom(SecureRandom secureRandom) {
 		this.secureRandom = secureRandom;
+		resetSecurityContext();
 	}
 
 
@@ -199,6 +218,7 @@ public class SecureBaseObject extends BaseObject {
 	 */
 	public void setKeyManagers(KeyManager[] keyManagers) {
 		this.keyManagers = keyManagers;
+		resetSecurityContext();
 	}
 
 
@@ -284,7 +304,7 @@ public class SecureBaseObject extends BaseObject {
 						String keyStoreFileName = getKeyStoreFileName();
 
 						if( keyStoreFileName == null ) {
-							throw new IllegalStateException("Keystore file location is not defined.  Set the 'keys' system property.");
+							throw new IllegalStateException("Keystore file location is not defined.  Set the '"+PROPERTY_KEY_STORE_NAME+"' property.");
 						}
 
 						/*
@@ -293,21 +313,21 @@ public class SecureBaseObject extends BaseObject {
 						 * In this case we want that behavior.  It allows a property file to be replaced or overwritten by the extending class. 
 						 */
 						//  See if it's available as a resource
-						InputStream in = getClass().getResourceAsStream(keyStoreFileName);
-						if( in == null ) {
+						InputStream resource = getClass().getResourceAsStream(keyStoreFileName);
+						if( resource == null ) {
 							File f = new File(keyStoreFileName);
 
 							if( f.exists() == false) {
 								throw new IllegalStateException("KeyStore file not found ("+f+")");
 							}
 
-							in = new FileInputStream(f);			
+							resource = new FileInputStream(f);			
 						}
 
-
-						ks.load(in, passphrase);
-
-						try {in.close();} catch (Throwable e) {}
+						//  try-with-resources so the stream is closed even if load fails (bad password, corrupt file)
+						try(InputStream in = resource) {
+							ks.load(in, passphrase);
+						}
 
 						keyStore = ks;
 					} catch ( KeyStoreException | NoSuchAlgorithmException | CertificateException e) {
@@ -331,7 +351,8 @@ public class SecureBaseObject extends BaseObject {
 			synchronized (this) {
 				if( keyStorePassword == null ) {
 					keyStorePassword = getProperty(PROPERTY_PASS_PHRASE);
-					logDebug(PROPERTY_PASS_PHRASE+"="+keyStorePassword);
+					//  Never log the password itself
+					logDebug(PROPERTY_PASS_PHRASE+(keyStorePassword == null ? " is not defined":" is defined"));
 				}
 			}
 		}
@@ -347,6 +368,9 @@ public class SecureBaseObject extends BaseObject {
 	 */
 	public void setKeyStorePassword(String keyStorePassword) {
 		this.keyStorePassword = keyStorePassword;
+		keyStore = null;
+		keyManagers = null;
+		resetSecurityContext();
 	}
 
 	/**
@@ -423,6 +447,9 @@ public class SecureBaseObject extends BaseObject {
 	 */
 	public void setKeyStoreFileName(String keyStore) {
 		this.keyStoreFileName = keyStore;
+		this.keyStore = null;
+		keyManagers = null;
+		resetSecurityContext();
 	}
 
 	/**
@@ -432,6 +459,9 @@ public class SecureBaseObject extends BaseObject {
 	 */
 	public void setKeyStoreType(String keyStoreType) {
 		this.keyStoreType = keyStoreType;
+		keyStore = null;
+		keyManagers = null;
+		resetSecurityContext();
 	}
 
 	/**
@@ -440,6 +470,9 @@ public class SecureBaseObject extends BaseObject {
 	 */
 	public void setAlgorithm(String algorithm) {
 		this.algorithm = algorithm;
+		keyManagerFactory = null;
+		keyManagers = null;
+		resetSecurityContext();
 	}
 
 	/**
@@ -450,7 +483,7 @@ public class SecureBaseObject extends BaseObject {
 	public void setProtocol(String protocol) {
 		this.protocol = protocol;
 		// the context is based on the protocol so if it's already created we'll need to reset it.
-		sslContext = null;
+		resetSecurityContext();
 	}
 
 	/**
@@ -467,6 +500,7 @@ public class SecureBaseObject extends BaseObject {
 	 */
 	public void setTrustManagers(TrustManager[] mgr) {
 		trustManagers = mgr;
+		resetSecurityContext();
 	}
 
 

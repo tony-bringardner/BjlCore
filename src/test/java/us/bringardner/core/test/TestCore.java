@@ -25,10 +25,11 @@
  */
 package us.bringardner.core.test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -63,11 +64,11 @@ import javax.net.SocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import us.bringardner.core.BaseObject;
 import us.bringardner.core.BaseThread;
@@ -91,7 +92,7 @@ public class TestCore extends TestCoreBase {
 
 	Map<Level,String> expecedLogging = new TreeMap<ILogger.Level, String>();
 
-	@BeforeClass
+	@BeforeAll
 	public static void setUpBeforeClass() throws Exception {
 		/*
 Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) with a validity of 90 days
@@ -100,11 +101,11 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 		 */
 	}
 
-	@AfterClass
+	@AfterAll
 	public static void tearDownAfterClass() throws Exception {
 	}
 
-	@Before
+	@BeforeEach
 	public void setUp() throws Exception {
 
 
@@ -504,7 +505,7 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 
 	}
 
-	@After
+	@AfterEach
 	public void tearDown() throws Exception {
 
 	}
@@ -574,7 +575,7 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 		Pattern reDate = Pattern.compile("([0-9]{2})[-]([0-9]{2})[-]([0-9]{4})");
 		Pattern reTime = Pattern.compile("([0-9]{1,2})[:]([0-9]{2})[:]([0-9]{2})[.]([0-9]{3})");
 
-		assertTrue("Number of lines are not good=",elines.length>=2 && alines.length>=2);
+		assertTrue(elines.length>=2 && alines.length>=2, "Number of lines are not good=");
 
 		for (int lidx = 0; lidx < elines.length; lidx++) {
 			String e [] = elines[lidx].split("[ ]");
@@ -583,7 +584,7 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 			if( e.length != a.length) {
 				System.out.println("Here");
 			}
-			assertEquals("Length of results don't match on line "+lidx,e.length, a.length);
+			assertEquals(e.length, a.length, "Length of results don't match on line "+lidx);
 
 			for (int idx = 0; idx < a.length; idx++) {
 				String one = a[idx];
@@ -599,7 +600,7 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 
 							if( !(em.matches() && am.matches())) {
 								if(!(one.startsWith("us.bringardner.core.") && two.startsWith("us.bringardner.core."))) {
-									assertTrue("Field "+idx+" on line "+lidx+" don't match and are not date or time w="+e[idx]+" a="+a[idx],false);
+									assertTrue(false, "Field "+idx+" on line "+lidx+" don't match and are not date or time w="+e[idx]+" a="+a[idx]);
 								}
 							}
 						}
@@ -681,26 +682,26 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 
 		SearchableClassLoader l2 = SearchableClassLoader.getLoader(Arrays.asList(file2.getAbsolutePath()));
 		List<Class<?>> list2 = l2.findTarget(BaseObject.class);
-		assertEquals("jar flile List sizes do not match",expected2.length,list2.size());
+		assertEquals(expected2.length, list2.size(), "jar flile List sizes do not match");
 		for (int idx = 0; idx < expected2.length; idx++) {
-			assertEquals("jar file Class does not match", list2.get(idx), expected2[idx]);
+			assertEquals(list2.get(idx), expected2[idx], "jar file Class does not match");
 		}
 
 		File file = new File("TestFiles/us").getCanonicalFile();		
 		SearchableClassLoader l1 = SearchableClassLoader.getLoader(Arrays.asList(file.getAbsolutePath()));
 		List<Class<?>> list1 = l1.findTarget(BaseObject.class);
-		assertEquals("directory List sizes do not match",list1.size(),expected1.length);
+		assertEquals(list1.size(), expected1.length, "directory List sizes do not match");
 		for (int idx = 0; idx < expected1.length; idx++) {
-			assertEquals("directory Class does not match", list1.get(idx), expected1[idx]);
+			assertEquals(list1.get(idx), expected1[idx], "directory Class does not match");
 		}
 
 
 
 		SearchableClassLoader l = SearchableClassLoader.getClassPathLoader();
 		List<Class<?>> list = l.findTarget(BaseObject.class);
-		assertTrue("class path List sizes do not match",list.size()==expected3.length);
+		assertTrue(list.size()==expected3.length, "class path List sizes do not match");
 		for (int idx = 0; idx < expected3.length; idx++) {
-			assertEquals("class path Class does not match", list.get(idx), expected3[idx]);
+			assertEquals(list.get(idx), expected3[idx], "class path Class does not match");
 		}
 
 	}
@@ -721,7 +722,8 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 	@Test
 	public void testJulLogger() {
 		//The java.util.logging package is not real done well in my opinion.
-		System.setProperty("java.util.logging.config.file", "/Volumes/Data/eclipse-workspace-jmail/BjlCore/resources/JulLogging.properties");
+		//  relative to the project directory (the working directory when tests are run by Maven or Eclipse)
+		System.setProperty("java.util.logging.config.file", new File("resources/JulLogging.properties").getAbsolutePath());
 
 		JulLogger test = new JulLogger();
 		test.init("us.bringardner.core.Log4JLogger");
@@ -759,7 +761,7 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 		System.setProperty("Value05", "System");
 
 		for(int idx=1; idx <= 6; idx++) {
-			assertEquals("idx="+idx, expected[idx-1],getProperty("Value0"+idx,"Default"+idx));
+			assertEquals(expected[idx-1], getProperty("Value0"+idx,"Default"+idx), "idx="+idx);
 		}
 	}
 
@@ -789,7 +791,7 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 			} catch (InterruptedException e) {
 			}	
 		}
-		assertTrue("Thread is not running",thread.isRunning());
+		assertTrue(thread.isRunning(), "Thread is not running");
 
 		thread.stop();		
 		startTime = System.currentTimeMillis();
@@ -800,7 +802,7 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 			}	
 		}
 
-		assertTrue("Thread did not stop",!thread.isRunning());
+		assertTrue(!thread.isRunning(), "Thread did not stop");
 
 
 	}
@@ -848,8 +850,8 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 				new Tm(),
 		};
 
-		int port = 7778;
-		AbstractCoreServer svr = new AbstractCoreServer(port,useSSL) {
+		//  port 0 = use any free port, so the test can't fail because a fixed port is in use.
+		AbstractCoreServer svr = new AbstractCoreServer(0,useSSL) {
 			Socket socket = null;
 			InputStream in = null;
 			OutputStream out = null;
@@ -906,7 +908,8 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 			} catch (InterruptedException e) {
 			}	
 		}
-		assertTrue("Server is not running",svr.isRunning());
+		assertTrue(svr.isRunning(), "Server is not running");
+		int port = svr.getServerSocket().getLocalPort();
 		String clientMEssage = "Client is here\n";
 		try {
 			SocketClient client = new SocketClient(useSSL);
@@ -924,7 +927,7 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 			}
 
 			String response = new String(data);
-			assertEquals("Server response is not what we expected",clientMEssage, response);
+			assertEquals(clientMEssage, response, "Server response is not what we expected");
 			try {in.close();} catch (Exception e) {	}
 			try {out.close();} catch (Exception e) {	}							
 			try {socket.close();} catch (Exception e) {}
@@ -936,10 +939,10 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 				} catch (InterruptedException e) {
 				}	
 			}
-			assertTrue("Server is did not stop",!svr.isRunning());
+			assertTrue(!svr.isRunning(), "Server is did not stop");
 		} catch (Throwable e) {
 			e.printStackTrace();
-			assertTrue("Could not process client code. e="+e,true);			
+			fail("Could not process client code. e="+e, e);			
 		}
 		if( useSSL) {
 			String ksname= getProperty("KeyStoreName");
@@ -963,16 +966,16 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 			map.put("Key"+idx, "Value"+idx);
 		}
 
-		assertEquals("Map is the wrong size", maxSize, map.size());
+		assertEquals(maxSize, map.size(), "Map is the wrong size");
 		//  Now the map should have eliminate the first entry Key0...
-		assertNull("Key0 was not removed from lru map", map.get("Key0"));
+		assertNull(map.get("Key0"), "Key0 was not removed from lru map");
 		// this makes Key3 the MRU entry
-		assertNotNull("Key3 is not in the lru map", map.get("Key3"));
+		assertNotNull(map.get("Key3"), "Key3 is not in the lru map");
 		// and another entry will cause "Key1" to be removed
 		map.put("Key11", "Value11");
-		assertEquals("Map is the wrong size", maxSize, map.size());
+		assertEquals(maxSize, map.size(), "Map is the wrong size");
 		//  Now the map should have eliminate the first entry Key0...
-		assertNull("Key1 was not removed from lru map", map.get("Key1"));
+		assertNull(map.get("Key1"), "Key1 was not removed from lru map");
 	}
 
 	@Test
@@ -1026,7 +1029,7 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 		// check the results
 		for(DateFormatThread thread : threads) {
 			for(String val : thread.results) {
-				assertEquals("Formatted date is not correct", val,expect);
+				assertEquals(val, expect, "Formatted date is not correct");
 			}
 		}
 	}
@@ -1084,11 +1087,11 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 			e.printStackTrace();
 		}
 		int exit = p.exitValue();
-		assertEquals("Invalid exit code",0,exit);
+		assertEquals(0, exit, "Invalid exit code");
 		String expect = "Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) with a validity of 90 days\n"
 				+ "	for: CN=bringardner.us, OU=AA, O=BBB, L=Bringardner, ST=CCCC, C=DD";
 		String tmp =  readAllBytes(p.getInputStream())+ readAllBytes(p.getErrorStream());
-		assertEquals("Invalid response text ",expect.trim(),tmp.trim());
+		assertEquals(expect.trim(), tmp.trim(), "Invalid response text ");
 
 	}
 
@@ -1114,7 +1117,7 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 
 		DatePanel panel = new DatePanel(startDate.getTime());
 		Date date2 = panel.getDate();
-		assertEquals("", startDate.getTime(), date2);
+		assertEquals(startDate.getTime(), date2, "");
 
 	}
 

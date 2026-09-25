@@ -32,22 +32,24 @@ public abstract class BaseThread extends SecureBaseObject implements Runnable {
 	public static final int DEFAULT_ERROR_SLEEP_TIME = 60000;
 	
 	//  the run method must set the running field to true
-	protected boolean running;
-	protected boolean stopping;
-	protected boolean started=false;
-	protected Thread thread;
+	//  These fields are read and written by different threads so they MUST be volatile, 
+	//  otherwise the run loop may never see stopping change.
+	protected volatile boolean running;
+	protected volatile boolean stopping;
+	protected volatile boolean started=false;
+	protected volatile Thread thread;
 	
-	private String name;
-	private boolean daemon=true;
-	private int priority = -1;
-	private boolean stopOnError = false;
+	private volatile String name;
+	private volatile boolean daemon=true;
+	private volatile int priority = -1;
+	private volatile boolean stopOnError = false;
 	
 	
-	private int errorSleepTime = DEFAULT_ERROR_SLEEP_TIME;
+	private volatile int errorSleepTime = DEFAULT_ERROR_SLEEP_TIME;
 
-	private ClassLoader contextClassLoader;
+	private volatile ClassLoader contextClassLoader;
 
-	private UncaughtExceptionHandler uncaughtExceptionHandler;
+	private volatile UncaughtExceptionHandler uncaughtExceptionHandler;
 	
 	public BaseThread() {
 		super();
@@ -118,6 +120,13 @@ public abstract class BaseThread extends SecureBaseObject implements Runnable {
 	 */
 	public int getErrorSleepTime() {
 		return errorSleepTime;
+	}
+
+	/**
+	 * @param errorSleepTime the amount of time (in milliseconds) to sleep if we encounter an error and isStopOnError() is false.
+	 */
+	public void setErrorSleepTime(int errorSleepTime) {
+		this.errorSleepTime = errorSleepTime;
 	}
 
 	/**
@@ -224,8 +233,12 @@ public abstract class BaseThread extends SecureBaseObject implements Runnable {
 	 * the running field which should be set to true during the run method.
 	 *   
 	 */
-	public void start() {
-		if( !running ) {
+	public synchronized void start() {
+		Thread current = thread;
+		//  Don't start a second thread while the first one is starting or still running.
+		if( !running && (current == null || !current.isAlive()) ) {
+			stopping = false;
+			started = false;
 			thread = new Thread(this);
 			String name = getName();
 			if( name != null ) {
@@ -262,6 +275,43 @@ public abstract class BaseThread extends SecureBaseObject implements Runnable {
 	 */
 	public void stop() {
 		stopping = true;
+	}
+	
+	/**
+	 * Stop the thread processing and wait (up to timeoutMillis) for the thread to terminate.
+	 * 
+	 * @param timeoutMillis maximum time to wait. Zero means don't wait. 
+	 * @param interrupt if true, the thread is also interrupted (to wake it from sleep, wait, etc.).
+	 * @return true if the thread has terminated. 
+	 * @throws InterruptedException if the calling thread is interrupted while waiting.
+	 */
+	public boolean stop(long timeoutMillis, boolean interrupt) throws InterruptedException {
+		stop();
+		Thread current = thread;
+		if( current == null ) {
+			return !running;
+		}
+		if( interrupt ) {
+			current.interrupt();
+		}
+		if( timeoutMillis > 0 && current != Thread.currentThread()) {
+			current.join(timeoutMillis);
+		}
+		return !current.isAlive();
+	}
+	
+	/**
+	 * Wait for the thread to terminate.
+	 * 
+	 * @param timeoutMillis maximum time to wait (0 means wait forever).
+	 * @throws InterruptedException
+	 * @see Thread#join(long)
+	 */
+	public void join(long timeoutMillis) throws InterruptedException {
+		Thread current = thread;
+		if( current != null ) {
+			current.join(timeoutMillis);
+		}
 	}
 	
 	public boolean hasStarted() {

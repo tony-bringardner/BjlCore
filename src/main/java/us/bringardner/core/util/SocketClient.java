@@ -50,16 +50,21 @@ public class SocketClient extends SecureBaseObject {
 
 	public static final String PROPERTY_SO_LINGER = "SoLinger";
 
-	public static final int DEFAULT_SO_LINGER = 60000;
+	/**
+	 * SO_LINGER is in SECONDS (see Socket.setSoLinger).
+	 * This was 60000 (almost 17 hours) which could block Socket.close() for a very long time.
+	 */
+	public static final int DEFAULT_SO_LINGER = 10;
 
 	public static final String PROPERTY_IS_SO_LINGER = "IsSoLinger";
 
 
-	private int lingerTime=-1;
+	private volatile int lingerTime=-1;
 
-	private int socketTimeout=-1;
+	private volatile int socketTimeout=-1;
 
-	private boolean isSoLinger;
+	//  null means the IsSoLinger property has not been read yet
+	private volatile Boolean isSoLinger;
 
 
 	private volatile SocketFactory factory;
@@ -124,12 +129,19 @@ public class SocketClient extends SecureBaseObject {
 	
 
 	@Override
+	protected void resetSecurityContext() {
+		super.resetSecurityContext();
+		//  The factory was created from the old SSLContext
+		factory = null;
+	}
+
+	@Override
 	protected void init() {
 		super.init();
 		String tmp = null;
 
 		if( (tmp = getProperty(PROPERTY_IS_SO_LINGER)) != null ) {
-			isSoLinger = tmp.toLowerCase().equals("true");
+			isSoLinger = tmp.trim().equalsIgnoreCase("true");
 		}
 
 	}
@@ -143,7 +155,7 @@ public class SocketClient extends SecureBaseObject {
 		if( lingerTime < 0 ) {
 			synchronized(this) {
 				if( lingerTime < 0 ) {
-					lingerTime = Integer.parseInt(getProperty(PROPERTY_SO_LINGER,""+DEFAULT_SO_LINGER));
+					lingerTime = getIntProperty(PROPERTY_SO_LINGER,DEFAULT_SO_LINGER);
 				}
 			}
 		}
@@ -178,8 +190,13 @@ public class SocketClient extends SecureBaseObject {
 	/**
 	 * @return true is SoLInger should be enabled for newly accepted Sockets.
 	 */
-	public boolean isSoLinger() {		
-		return isSoLinger;
+	public boolean isSoLinger() {
+		Boolean ret = isSoLinger;
+		if( ret == null ) {
+			ret = getBooleanProperty(PROPERTY_IS_SO_LINGER, false);
+			isSoLinger = ret;
+		}
+		return ret;
 	}
 
 	/**
@@ -210,7 +227,7 @@ public class SocketClient extends SecureBaseObject {
 		if( socketTimeout < 0 ) {
 			synchronized(this) {
 				if( socketTimeout < 0 ) {
-					socketTimeout = Integer.parseInt(getProperty(PROPERTY_SOCKET_TIMEOUT, ""+DEFAULT_SOCKET_TIMEOUT));
+					socketTimeout = getIntProperty(PROPERTY_SOCKET_TIMEOUT, DEFAULT_SOCKET_TIMEOUT);
 				}
 			}
 		}

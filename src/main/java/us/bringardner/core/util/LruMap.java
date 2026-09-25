@@ -46,8 +46,16 @@ public class LruMap<K,V> extends LinkedHashMap<K,V> {
 	}
 
 	public LruMap(int maxEntries) {
-		this();
+		//  Size the table for the maximum number of entries (plus room for the load factor) so small maps don't waste memory.
+		super(initialCapacity(maxEntries),0.75f,true);
 		this.maxSize = maxEntries;
+	}
+
+	private static int initialCapacity(int maxEntries) {
+		if( maxEntries <= 0 ) {
+			return 16;
+		}
+		return (int) Math.min(2000, (maxEntries / 0.75f) + 2);
 	}
 
 

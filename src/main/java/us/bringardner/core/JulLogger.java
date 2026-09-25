@@ -5,6 +5,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
 
 /**
@@ -33,7 +34,11 @@ import java.util.logging.Logger;
 public class JulLogger implements ILogger {
 
 	private static final String JUL_LOGGING_PROPERTIES = "/JulLogging.properties";
-	private Logger logger;
+	
+	//  The configuration file is only read once per JVM (not every time a logger is created).
+	private static final AtomicBoolean configured = new AtomicBoolean(false);
+	
+	private volatile Logger logger;
 	
 	
 	public Logger getLogger() {
@@ -53,41 +58,20 @@ public class JulLogger implements ILogger {
 	}
 
 	private void log(java.util.logging.Level level, String msg, Throwable error) {
-		
-		 if( logger == null ) {
-			 init(null);
-		 }
-		 if( logger == null ) {
-			 if( isEnabled(level) ) {
-				 System.err.println("No logger availible for");
-				 System.err.println(msg);
-				 if( error != null ) {
-					 error.printStackTrace(System.err);
-				 }
-			 }
-		 } else {
-			 logger.log(level, msg,error);
-		 }
+		Logger tmp = getLogger();
+		if( tmp == null ) {
+			System.err.println("No logger availible for "+msg);
+			if( error != null ) {
+				error.printStackTrace(System.err);
+			}
+		} else {
+			tmp.log(level, msg,error);
+		}
 	}
 
-	private boolean isEnabled(java.util.logging.Level level) {
-		boolean ret = false;
-		
-		if( level.intValue() == java.util.logging.Level.FINEST.intValue()) {
-			ret = isDebugEnabled();
-		} else if( level.intValue() == java.util.logging.Level.INFO.intValue()) {
-			ret = isInfoEnabled();
-		} else if( level.intValue() == java.util.logging.Level.SEVERE.intValue()) {
-			ret = isErrorEnabled();
-		} else if( level.intValue() == java.util.logging.Level.WARNING.intValue()) {
-			ret = isWarnEnabled();
-		} else if( level.intValue() == java.util.logging.Level.OFF.intValue()) {
-			ret = false;
-		} else if( level.intValue() == java.util.logging.Level.ALL.intValue()) {
-			ret = true;
-		}
-		
-		return ret;
+	private boolean isLoggable(java.util.logging.Level level) {
+		Logger tmp = getLogger();
+		return tmp != null && tmp.isLoggable(level);
 	}
 
 	public void warn(String msg) {
@@ -115,52 +99,87 @@ public class JulLogger implements ILogger {
 	}
 
 	public boolean isDebugEnabled() {
-		return logger.isLoggable(java.util.logging.Level.FINEST);
+		return isLoggable(java.util.logging.Level.FINEST);
 	}
 
 	public boolean isErrorEnabled() {
-		return logger.isLoggable(java.util.logging.Level.SEVERE);
+		return isLoggable(java.util.logging.Level.SEVERE);
 	}
 
 	
 	public boolean isInfoEnabled() {		
-		return logger.isLoggable(java.util.logging.Level.INFO);
+		return isLoggable(java.util.logging.Level.INFO);
 	}
 
 	public boolean isWarnEnabled() {		
-		return logger.isLoggable(java.util.logging.Level.WARNING);
+		return isLoggable(java.util.logging.Level.WARNING);
 	}
 	
 	/**
-	 * Implementation for JUL (java.util.logging).
-	 * Level.INFO =  java.util.logging.Level.INFO
-	 * Level.DEBUG = java.util.logging.Level.FINEST
-	 * Level.ERROR = java.util.logging.Level.SEVERE;
-	 * 
-	 * @see us.bringardner.core.ILogger#setLevel(us.bringardner.core.ILogger.Level)
-	 **/
+	 * Map ILogger levels to java.util.logging levels 
+	 *	NONE  -&gt; OFF
+	 *	ERROR -&gt; SEVERE
+	 *	WARN  -&gt; WARNING
+	 *	INFO  -&gt; INFO
+	 *	DEBUG -&gt; FINEST
+	 */
 	public void setLevel(Level level) {
-		//  OFF, SEVERE, WARNING, INFO, CONFIG, FINE, FINER, FINEST, ALL
-		/*
-	NONE,
-		ERROR,
-		WARN,
-		INFO,
-		DEBUG
-		 */
 		java.util.logging.Level ret = java.util.logging.Level.OFF;
 		
-		switch (level) {
-		case NONE:ret = java.util.logging.Level.OFF;break;
-		case ERROR:ret = java.util.logging.Level.SEVERE;break;
-		case WARN:ret = java.util.logging.Level.WARNING;break;
-		case INFO:ret = java.util.logging.Level.INFO;break;
-		case DEBUG:ret = java.util.logging.Level.FINEST;break;
-		
+		if( level != null ) {
+			switch (level) {
+			case NONE:ret = java.util.logging.Level.OFF;break;
+			case ERROR:ret = java.util.logging.Level.SEVERE;break;
+			case WARN:ret = java.util.logging.Level.WARNING;break;
+			case INFO:ret = java.util.logging.Level.INFO;break;
+			case DEBUG:ret = java.util.logging.Level.FINEST;break;
+			}
 		}
 		
-		logger.setLevel(ret);
+		getLogger().setLevel(ret);
 
+	}
+
+	/**
+	 * Read the java.util.logging configuration (once per JVM). 
+	 * The file named by the java.util.logging.config.file system property is used if it exists, 
+	 * otherwise /JulLogging.properties from the class path (if available).
+	 */
+	private void configure() {
+		if( !configured.compareAndSet(false, true)) {
+			return;
+		}
+		
+		// java.util.logging.LogMAnager should take care of this but it does not seem reliable
+		String configFile = System.getProperty("java.util.logging.config.file");
+		InputStream in = null;
+		try {
+			if( configFile != null ) {
+				File file = new File(configFile);
+				if( file.exists()) {
+					in = new FileInputStream(file);
+				}
+			} 
+
+			if(in == null) {
+				in = getClass().getResourceAsStream(JUL_LOGGING_PROPERTIES);	
+			}
+
+			if( in != null ) {
+				//  updateConfiguration (unlike readConfiguration) does not reset every logger and handler in the JVM,
+				//  it only changes the loggers and handlers named in the file.
+				java.util.logging.LogManager.getLogManager().updateConfiguration(in, null);
+			}
+		} catch (IOException | RuntimeException e) {
+			System.err.println("Error reading java.util.logging configuration. e="+e);
+		} finally {
+			if( in != null ) {
+				try {
+					in.close();
+				} catch (IOException e2) {
+				}
+			}
+		}
 	}
 
 	public void init(String name) {	
@@ -169,63 +188,36 @@ public class JulLogger implements ILogger {
 			name = getClass().getName();
 		}
 		
-		// java.util.logging.LogMAnager should take care of this but it does not seem reliable
-		String configFile = System.getProperty("java.util.logging.config.file");
-		if( configFile == null ) {
-			configFile = JUL_LOGGING_PROPERTIES;
-		}
-		InputStream in = null;
-		File file = new File(configFile);
-		if( file.exists()) {
-			try {
-				in = new FileInputStream(file);
-			} catch (IOException e) {
-			}
-		} 
+		configure();
 		
-		if(in == null) {
-			in = getClass().getResourceAsStream(JUL_LOGGING_PROPERTIES);	
-		}
-		
-		if( in != null ) {
-				try {
-					java.util.logging.LogManager.getLogManager().readConfiguration(in);
-				} catch (Exception e) {
-				} finally {
-					try {
-						in.close();
-					} catch (Exception e2) {
-					}
-				}			
-		}
-		
-		try {
-			logger = java.util.logging.Logger.getLogger(name);	
-		} catch (Exception e) {
-			System.out.println(e);
-		}
+		logger = java.util.logging.Logger.getLogger(name);	
 	}
 
 	public Level getLevel() {
 		Level ret = Level.NONE;
-		java.util.logging.Level l  = logger.getLevel();
-
-		if(l.equals(java.util.logging.Level.INFO)) {
-			ret = Level.INFO;
-		} else if(l.equals(java.util.logging.Level.ALL)) {
-			ret = Level.DEBUG;
-		} else if(l.equals(java.util.logging.Level.CONFIG)) {
-			ret = Level.DEBUG;
-		} else if(l.equals(java.util.logging.Level. FINE)) {
-			ret = Level.DEBUG;
-		} else if(l.equals(java.util.logging.Level.FINEST)) {
-			ret = Level.DEBUG;
-		} else if(l.equals(java.util.logging.Level.OFF)) {
+		
+		//  The level is null when it's inherited from a parent logger
+		java.util.logging.Level l  = null;
+		for(Logger tmp = getLogger(); l == null && tmp != null; tmp = tmp.getParent()) {
+			l = tmp.getLevel();
+		}
+		
+		if( l == null ) {
+			l = java.util.logging.Level.INFO;
+		}
+		
+		int val = l.intValue();
+		if( val == java.util.logging.Level.OFF.intValue()) {
 			ret = Level.NONE;
-		} else if(l.equals(java.util.logging.Level.SEVERE)) {
+		} else if( val >= java.util.logging.Level.SEVERE.intValue()) {
 			ret = Level.ERROR;
-		} else if(l.equals(java.util.logging.Level.WARNING)) {
+		} else if( val >= java.util.logging.Level.WARNING.intValue()) {
 			ret = Level.WARN;
+		} else if( val >= java.util.logging.Level.INFO.intValue()) {
+			ret = Level.INFO;
+		} else {
+			//  CONFIG, FINE, FINER, FINEST and ALL
+			ret = Level.DEBUG;
 		}
 		
 		return ret;

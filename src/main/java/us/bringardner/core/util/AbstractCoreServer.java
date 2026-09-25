@@ -7,8 +7,8 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.UnknownHostException;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import javax.net.ServerSocketFactory;
 import javax.net.ssl.SSLServerSocket;
@@ -63,7 +63,11 @@ public abstract class AbstractCoreServer extends BaseThread  {
 
 	public static final String PROPERTY_SO_LINGER = "SoLinger";
 
-	public static final int DEFAULT_SO_LINGER = 60000;
+	/**
+	 * SO_LINGER is in SECONDS (see Socket.setSoLinger).
+	 * This was 60000 (almost 17 hours) which could block Socket.close() for a very long time.
+	 */
+	public static final int DEFAULT_SO_LINGER = 10;
 
 	public static final String PROPERTY_IS_SO_LINGER = "IsSoLinger";
 
@@ -72,23 +76,27 @@ public abstract class AbstractCoreServer extends BaseThread  {
 	private volatile ServerSocketFactory factory;
 	
 	
-	private int port=-1;
-	
-	private Map<String, Object> attributes = new HashMap<String, Object>();
+	private volatile int port=-1;
 
-	private boolean needClientAuth=false;
+	//  Attributes may be accessed by many connection threads at the same time.
+	private volatile Map<String, Object> attributes = new ConcurrentHashMap<String, Object>();
 
-	private int acceptTimeout=-1;
+	private volatile boolean needClientAuth=false;
 
-	private int lingerTime=-1;
-	
-	private int socketTimeout=-1;
-	
-	private int backlog = -1;
-	
+	private volatile int acceptTimeout=-1;
+
+	private volatile int lingerTime=-1;
+
+	private volatile int socketTimeout=-1;
+
+	private volatile int backlog = -1;
+
 	private volatile InetAddress bindAddr;
+	//  The bind address may legitimately be null so we need a separate flag to know if the property has been read.
+	private volatile boolean bindAddrConfigured = false;
 
-	private boolean isSoLinger;
+	//  null means the IsSoLinger property has not been read yet
+	private volatile Boolean isSoLinger;
 
 	private volatile ServerSocket serverSocket;
 	
@@ -118,12 +126,13 @@ public abstract class AbstractCoreServer extends BaseThread  {
 		String tmp = null;
 
 		if( (tmp = getProperty(PROPERTY_IS_SO_LINGER)) != null ) {
-			isSoLinger = tmp.toLowerCase().equals("true");
+			isSoLinger = tmp.trim().equalsIgnoreCase("true");
 		}
 		
 		if( (tmp = getProperty(PROPERTY_BIND_ADDRESS)) != null ) {
 			try {
-				bindAddr = InetAddress.getByName(tmp);
+				bindAddr = InetAddress.getByName(tmp.trim());
+				bindAddrConfigured = true;
 			} catch (UnknownHostException e) {
 				logError("Cannot create BindAddress.",e);
 				throw new IllegalStateException(e);
@@ -163,7 +172,7 @@ public abstract class AbstractCoreServer extends BaseThread  {
 		if( backlog < 0 ) {
 			synchronized(this) {
 				if( backlog < 0 ) {
-					backlog = Integer.parseInt(getProperty(PROPERTY_BACKLOG,""+DEFAULT_BACKLOG));
+					backlog = getIntProperty(PROPERTY_BACKLOG,DEFAULT_BACKLOG);
 				}
 			}
 		}
@@ -191,7 +200,7 @@ public abstract class AbstractCoreServer extends BaseThread  {
 		if( lingerTime < 0 ) {
 			synchronized(this) {
 				if( lingerTime < 0 ) {
-					lingerTime = Integer.parseInt(getProperty(PROPERTY_SO_LINGER,""+DEFAULT_SO_LINGER));
+					lingerTime = getIntProperty(PROPERTY_SO_LINGER,DEFAULT_SO_LINGER);
 				}
 			}
 		}
@@ -213,7 +222,23 @@ public abstract class AbstractCoreServer extends BaseThread  {
 	 * @see java.net.ServerSocket 
 	 */
 	public InetAddress getBindAddr() {
-		//  The bind address may be null at runtime so it is configured in the init method
+		//  The bind address may be null (all local addresses) so we use a flag to know if the property has been read.
+		if( !bindAddrConfigured ) {
+			synchronized (this) {
+				if( !bindAddrConfigured ) {
+					String tmp = getProperty(PROPERTY_BIND_ADDRESS);
+					if( tmp != null ) {
+						try {
+							bindAddr = InetAddress.getByName(tmp.trim());
+						} catch (UnknownHostException e) {
+							logError("Cannot create BindAddress ("+tmp+").",e);
+							throw new IllegalStateException(e);
+						}
+					}
+					bindAddrConfigured = true;
+				}
+			}
+		}
 		return bindAddr;
 	}
 
@@ -225,6 +250,7 @@ public abstract class AbstractCoreServer extends BaseThread  {
 	 */
 	public void setBindAddr(InetAddress bindAddr) {
 		this.bindAddr = bindAddr;
+		this.bindAddrConfigured = true;
 	}
 
 	/**
@@ -288,6 +314,14 @@ public abstract class AbstractCoreServer extends BaseThread  {
 		this.factory = factory;
 	}
 
+	@Override
+	protected void resetSecurityContext() {
+		super.resetSecurityContext();
+		//  The factory was created from the old SSLContext
+		factory = null;
+	}
+
+
 	/**
 	 * The Server maintains a set of arbitrary values called attributes.  
 	 * The attributes may be set or retrieved by any clients via the IProcessor api.
@@ -296,7 +330,7 @@ public abstract class AbstractCoreServer extends BaseThread  {
 	 * @return the Object associated with the named attribute.
 	 */
 	public Object getAttribute(String name) {
-		return attributes.get(name);
+		return name == null ? null : attributes.get(name);
 	}
 
 	/**
@@ -307,7 +341,12 @@ public abstract class AbstractCoreServer extends BaseThread  {
 	 * @param attribute
 	 */
 	public void setAttribute(String name, Object attribute) {
-		attributes.put(name, attribute);
+		if( attribute == null ) {
+			//  ConcurrentHashMap does not allow null values, setting null is the same as removing it.
+			removeAttribute(name);
+		} else {
+			attributes.put(name, attribute);
+		}
 	}
 
 	/**
@@ -318,7 +357,7 @@ public abstract class AbstractCoreServer extends BaseThread  {
 	 * @return the values of the attribute that was removed or null in none existed.
 	 */
 	public Object removeAttribute(String name) {
-		return attributes.remove(name);
+		return name == null ? null : attributes.remove(name);
 	}
 
 	/**
@@ -326,7 +365,7 @@ public abstract class AbstractCoreServer extends BaseThread  {
 	 */
 	public int getPort() {
 		if( port == -1 ) {
-			port = Integer.parseInt(getProperty(PROPERTY_PORT,""+DEFAULT_PORT));
+			port = getIntProperty(PROPERTY_PORT,DEFAULT_PORT);
 		}
 		return port;
 	}
@@ -368,8 +407,13 @@ public abstract class AbstractCoreServer extends BaseThread  {
 	/**
 	 * @return true is SoLInger should be enabled for newly accepted Sockets.
 	 */
-	public boolean isSoLinger() {		
-		return isSoLinger;
+	public boolean isSoLinger() {
+		Boolean ret = isSoLinger;
+		if( ret == null ) {
+			ret = getBooleanProperty(PROPERTY_IS_SO_LINGER, false);
+			isSoLinger = ret;
+		}
+		return ret;
 	}
 
 	/**
@@ -400,7 +444,7 @@ public abstract class AbstractCoreServer extends BaseThread  {
 		if( socketTimeout < 0 ) {
 			synchronized(this) {
 				if( socketTimeout < 0 ) {
-					socketTimeout = Integer.parseInt(getProperty(PROPERTY_SOCKET_TIMEOUT, ""+DEFAULT_SOCKET_TIMEOUT));
+					socketTimeout = getIntProperty(PROPERTY_SOCKET_TIMEOUT, DEFAULT_SOCKET_TIMEOUT);
 				}
 			}
 		}
@@ -424,7 +468,7 @@ public abstract class AbstractCoreServer extends BaseThread  {
 		if( acceptTimeout < 0 ) {
 			synchronized(this) {
 				if(acceptTimeout < 0 ) {
-					acceptTimeout = Integer.parseInt(getProperty(PROPERTY_ACCEPT_TIMEOUT, ""+DEFAULT_ACCEPT_TIMEOUT));
+					acceptTimeout = getIntProperty(PROPERTY_ACCEPT_TIMEOUT, DEFAULT_ACCEPT_TIMEOUT);
 				}
 			}
 		}
