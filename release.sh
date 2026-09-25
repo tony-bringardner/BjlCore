@@ -9,7 +9,8 @@
 #
 # Steps:
 #   1. Read the version from pom.xml
-#   2. Check: git repo, no unfinished merge, GITHUB_TOKEN set, tag not already used
+#   2. Check: git repo, no unfinished merge, GitHub credentials in ~/.m2/settings.xml,
+#      tag not already used
 #   3. mvn clean deploy
 #   4. git commit (only if there are uncommitted changes), git tag v<version>,
 #      git push the current branch and the tag
@@ -78,8 +79,15 @@ BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 [[ "$BRANCH" != "HEAD" ]] || die "Not on a branch (detached HEAD)."
 [[ ! -f "$(git rev-parse --git-dir)/MERGE_HEAD" ]] || die "A merge is in progress. Finish it first."
 
-if [[ -z "${GITHUB_TOKEN:-}" ]]; then
-	die "GITHUB_TOKEN is not set (needed by ~/.m2/settings.xml to deploy to GitHub Packages)."
+# Deploying needs GitHub credentials for the "github" server id in ~/.m2/settings.xml.
+# The token may be written in settings.xml directly or read from an environment
+# variable such as ${env.GITHUB_TOKEN}; both are fine.
+SETTINGS="${HOME}/.m2/settings.xml"
+if [[ ! -f "$SETTINGS" ]] || ! grep -q "<id>[[:space:]]*github[[:space:]]*</id>" "$SETTINGS"; then
+	die "No <server> with <id>github</id> in $SETTINGS (Maven needs it to deploy to GitHub Packages)."
+fi
+if grep -q '\${env\.GITHUB_TOKEN}' "$SETTINGS" && [[ -z "${GITHUB_TOKEN:-}" ]]; then
+	die "$SETTINGS uses \${env.GITHUB_TOKEN}, but GITHUB_TOKEN is not set in this shell."
 fi
 
 SNAPSHOT=false
