@@ -6,6 +6,8 @@ package us.bringardner.core;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
 import us.bringardner.core.util.LruMap;
 
@@ -48,14 +50,31 @@ public class BaseObject {
 	private static volatile Class<?>   loggerClass = null;
 
 	//  The properties map is global so we use a LruMap to manage the memory footprint.
-	private static LruMap<String, Properties> properties = new LruMap<String, Properties>(DEFAULT_MAX_PROPERTIES);
-	private boolean supportPrefixProperty = true;
+	//  LruMap is an access-ordered LinkedHashMap (even get() modifies it) so EVERY access
+	//  must be guarded by the same lock.  We use the map itself as the lock.
+	private static final LruMap<String, Properties> properties = new LruMap<String, Properties>(DEFAULT_MAX_PROPERTIES);
+
+	//  Loggers are shared by name (like log4j and java.util.logging) so we don't create
+	//  (and initialize) a new ILogger for every object instance.
+	private static final ConcurrentHashMap<String, ILogger> loggers = new ConcurrentHashMap<>();
+
+	private volatile boolean supportPrefixProperty = true;
 
 	/**
 	 * @param maxSize for the LruMap used for properties.
 	 */
 	public static void setMaxProperties(int maxSize) {
-		properties.setMaxSize(maxSize);
+		synchronized (properties) {
+			properties.setMaxSize(maxSize);
+		}
+	}
+
+	/**
+	 * Remove all cached ILoggers. The next call to getLogger will create new ones.
+	 * Objects that have already obtained a logger will continue to use it.
+	 */
+	public static void clearLoggerCache() {
+		loggers.clear();
 	}
 
 	/**
@@ -65,14 +84,16 @@ public class BaseObject {
 	 * If the application uses properties only during initialization,
 	 * the cache may be cleared to reduce the memory footprint.  
 	 */
-	public synchronized static void clearPropertyCache() {
-		properties.clear();
+	public static void clearPropertyCache() {
+		synchronized (properties) {
+			properties.clear();
+		}
 	}
 
 	/**
 	 * propertyPrefix provides a "search path" for properties.
 	 */
-	private String propertyPrefix;
+	private volatile String propertyPrefix;
 
 	private volatile ILogger logger ;
 
@@ -140,9 +161,14 @@ public class BaseObject {
 	 * @param name
 	 * @return the Properties associated with the given name.
 	 */
-	private synchronized Properties getPropertyEntry(String name) {
-		Properties ret = properties.get(name);
+	private Properties getPropertyEntry(String name) {
+		Properties ret;
+		synchronized (properties) {
+			ret = properties.get(name);
+		}
 		if( ret == null ) {
+			//  Load outside the lock so a slow class path search does not block every other thread.
+			//  If two threads load the same file at the same time, the last one wins (the content is the same).
 			ret = new Properties();
 			try {
 				// First, see it we can find a file name "name.properties"
@@ -172,7 +198,9 @@ public class BaseObject {
 				e.printStackTrace(System.err);
 
 			} finally {
-				properties.put(name, ret);				
+				synchronized (properties) {
+					properties.put(name, ret);
+				}
 			}
 		}
 
@@ -284,15 +312,53 @@ public class BaseObject {
 
 
 	/**
+	 * Get an integer property. If the property is not defined, or is not a valid integer,
+	 * the default value is returned (an invalid value is reported to System.err).
+	 *  
+	 * @param propertyName Name of the property
+	 * @param defaultValue value to use if the property is not defined or is invalid
+	 * @return the integer value of the property
+	 * @see #getProperty(String, String)
+	 */
+	public int getIntProperty(String propertyName, int defaultValue) {
+		String tmp = getProperty(propertyName);
+		if( tmp == null ) {
+			return defaultValue;
+		}
+		try {
+			return Integer.parseInt(tmp.trim());
+		} catch (NumberFormatException e) {
+			// Don't use the logger here, getProperty is used while loggers are being created.
+			System.err.println("Invalid integer value for property "+propertyName+" ("+tmp+") in "+getClass().getName()+". Using default "+defaultValue);
+			return defaultValue;
+		}
+	}
+
+	/**
+	 * Get a boolean property ("true" in any case is true, anything else is false).
+	 * 
+	 * @param propertyName Name of the property
+	 * @param defaultValue value to use if the property is not defined
+	 * @return the boolean value of the property
+	 */
+	public boolean getBooleanProperty(String propertyName, boolean defaultValue) {
+		String tmp = getProperty(propertyName);
+		if( tmp == null ) {
+			return defaultValue;
+		}
+		return "true".equalsIgnoreCase(tmp.trim());
+	}
+
+	/**
 	 * Determine the class to use to implement the ILogger api.
 	 * The objective the this class is to implement logging without creating 
 	 * runtime dependencies to third party libraries. 
 	 * 
 	 * 1)  The System.property for "ILogger" is defined, that class is used.
-	 * 2)  If the log4j library is in the class path, that is used.
-	 * 3)  The default is used (java.util).
+	 * 2)  If the log4j2 API (org.apache.logging.log4j) is in the class path, Log4JLogger is used.
+	 * 3)  The default is BjlLogger.
 	 * 
-	 * @return 
+	 * @return the Class used to create ILoggers
 	 */
 	protected static Class<?> getLoggerClass() {
 		if( loggerClass == null ) {
@@ -301,18 +367,18 @@ public class BaseObject {
 					String  tmp = System.getProperty(PROPERTY_LOGGER);
 					if( tmp != null ) {
 						try {
-							loggerClass = Class.forName(tmp);
+							Class<?> cls = Class.forName(tmp);
+							if( ILogger.class.isAssignableFrom(cls)) {
+								loggerClass = cls;
+							} else {
+								System.err.println("Defined Logger does not implement "+ILogger.class.getName()+". "+PROPERTY_LOGGER+"="+tmp);
+							}
 						} catch (ClassNotFoundException e) {
-							System.err.println("Defined Logger is not availible. loggerClass="+loggerClass);
+							System.err.println("Defined Logger is not availible. "+PROPERTY_LOGGER+"="+tmp);
 						}
 					}
 					if( loggerClass == null ) 	{						
-						try {
-							Class.forName("org.apache.log4j.Level");
-							loggerClass = Log4JLogger.class;
-						} catch (ClassNotFoundException e) {
-							loggerClass = BjlLogger.class;
-						} 
+						loggerClass = Log4JLogger.isLog4jAvailable() ? Log4JLogger.class : BjlLogger.class;
 					}
 				}
 			}
@@ -326,15 +392,13 @@ public class BaseObject {
 	 * @return ILogger for this Object
 	 */
 	public ILogger getLogger() {
-		if( logger == null ) {
-			synchronized (this) {
-				if( logger == null ) {
-					logger = getLogger(getClass().getName());		
-				}
-			}			
+		ILogger ret = logger;
+		if( ret == null ) {
+			ret = getLogger(getClass().getName());
+			logger = ret;
 		}
 
-		return logger;
+		return ret;
 	}
 
 	/**
@@ -351,7 +415,15 @@ public class BaseObject {
 		getLogger().debug(msg);		
 	}
 
-
+	/**
+	 * The message is only created if Debug logging is enabled.
+	 * Example: logDebug(() -> "value="+expensiveCall());
+	 * 
+	 * @param msg Supplies the message to log if Debug logging is enabled
+	 */
+	public void logDebug(Supplier<String> msg) {
+		getLogger().debug(msg);		
+	}
 
 	/**
 	 * @param msg The message to log if Debug logging is enabled
@@ -379,11 +451,34 @@ public class BaseObject {
 	}
 
 	/**
+	 * @param msg The message to log if Warn logging is enabled
+	 */
+	public void logWarn(String msg) {
+		getLogger().warn(msg);
+	}
+
+	/**
+	 * @param msg The message to log if Warn logging is enabled
+	 * @param error The stack trace of the error is logged if Warn is enabled 
+	 */
+	public void logWarn(String msg, Throwable error) {
+		getLogger().warn(msg,error);
+	}
+
+	/**
 	 * @param msg The message to log if Info logging is enabled
 	 */
 	public void logInfo(String msg) {
-		getLogger().
-		info(msg);		
+		getLogger().info(msg);		
+	}
+
+	/**
+	 * The message is only created if Info logging is enabled.
+	 * 
+	 * @param msg Supplies the message to log if Info logging is enabled
+	 */
+	public void logInfo(Supplier<String> msg) {
+		getLogger().info(msg);		
 	}
 
 	/**
@@ -411,6 +506,13 @@ public class BaseObject {
 	}
 
 	/**
+	 * @return true is Warn logging is enabled
+	 */
+	public boolean isWarnEnabled() {
+		return getLogger().isWarnEnabled();
+	}
+
+	/**
 	 * @return true is Info logging is enabled
 	 */
 
@@ -421,29 +523,41 @@ public class BaseObject {
 
 
 	/**
-	 * Find the ILogger for his name.  
+	 * Find the ILogger for this name.  
+	 * ILoggers are cached by name and shared by all objects that use the same name.
 	 * 
 	 * @param name
 	 * @return the ILogger associated with the given name.
 	 */
 	protected ILogger getLogger(String name) {
-		if( logger == null ) {
-			synchronized (this) {
-				if( logger == null ) {
-					Class<?> loggerClass = getLoggerClass();
-					try {
-						ILogger tmp = (ILogger) loggerClass.getDeclaredConstructor().newInstance();
-						tmp.init(name);
-						logger = tmp;
-					} catch (Exception e) {
-						throw new IllegalStateException("Fatal error occured attempting to create ILogger. loggerClass="+loggerClass,e);
-					}
-				}
-			}
-		}
-		return logger;
+		return findLogger(name);
 	}
 
-
+	/**
+	 * Find (or create) the shared ILogger for this name.
+	 * 
+	 * @param name
+	 * @return the ILogger associated with the given name.
+	 */
+	public static ILogger findLogger(String name) {
+		if( name == null ) {
+			name = "";
+		}
+		ILogger ret = loggers.get(name);
+		if( ret == null ) {
+			// Create outside of any lock (ILogger.init may read properties or configuration files).
+			// Not using computeIfAbsent because creating a logger could recursively request another logger.
+			Class<?> loggerClass = getLoggerClass();
+			try {
+				ILogger tmp = (ILogger) loggerClass.getDeclaredConstructor().newInstance();
+				tmp.init(name);
+				ILogger prev = loggers.putIfAbsent(name, tmp);
+				ret = prev == null ? tmp : prev;
+			} catch (Exception e) {
+				throw new IllegalStateException("Fatal error occured attempting to create ILogger. loggerClass="+loggerClass,e);
+			}
+		}
+		return ret;
+	}
 
 }

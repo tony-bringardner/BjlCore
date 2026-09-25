@@ -25,9 +25,9 @@
  of external dependencies.
  
  
- Requires Java 9 or greater
+ Requires Java 11 or greater
  Dependencies:  
- 	Testing: log4j 2.13.2 or greater
+ 	Testing: log4j 2.24.3 or greater (optional at runtime, detected automatically)
  	Compile: None
  	Runtime: None
  

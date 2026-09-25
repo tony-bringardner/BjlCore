@@ -15,17 +15,43 @@
 		objective of these classes is to provide basic functionality such as
 		logging with a minimum of external dependencies. </description>
 
+	<properties>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+		<maven.compiler.release>11</maven.compiler.release>
+		<junit.version>5.11.4</junit.version>
+		<log4j.version>2.24.3</log4j.version>
+	</properties>
+
 	<build>
 		<!-- <sourceDirectory>src</sourceDirectory> -->
+		<testResources>
+			<testResource>
+				<directory>src/test/resources</directory>
+			</testResource>
+			<!-- Example logging configurations (log4j2.xml, JulLogging.properties) used by the logger tests.
+			     They are test resources only so they are not packaged in the library jar. -->
+			<testResource>
+				<directory>resources</directory>
+			</testResource>
+		</testResources>
+
+		<plugins>
+			<!-- Plugins listed only in pluginManagement are NOT executed, so the source jar is declared here. -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-source-plugin</artifactId>
+			</plugin>
+		</plugins>
+
 		<pluginManagement>
 			<plugins>
 				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-compiler-plugin</artifactId>
-					<version>3.3</version>
+					<version>3.13.0</version>
 					<configuration>
-						<source>11</source>
-						<target>11</target>
+						<release>${maven.compiler.release}</release>
 					</configuration>
 				</plugin>
 
@@ -39,7 +65,8 @@
 							<goals>
 								<goal>jar-no-fork</goal>
 							</goals>
-							<phase>deploy</phase>							
+							<!-- package (not deploy) so the source jar is attached BEFORE the deploy plugin runs -->
+							<phase>package</phase>
 							<configuration>
 								<skipSource>false</skipSource>
 								<attach>true</attach>
@@ -52,16 +79,18 @@
 					<version>2.8.2</version>
 					<!--
 					<configuration>
-					
-						 
+
+
 						https://www.baeldung.com/maven-repo-github
-					
+
 						<altDeploymentRepository>
 							internal.repo::default::file://${project.build.directory}/mvn-artifact
 						</altDeploymentRepository>
 					</configuration>
 					-->
 				</plugin>
+				<!-- NOTE: this plugin is only configured here (pluginManagement), it does not run
+				     unless it is also listed in build/plugins. It requires the branch-name property. -->
 				<plugin>
 					<groupId>com.github.github</groupId>
 					<artifactId>site-maven-plugin</artifactId>
@@ -93,10 +122,6 @@
 					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-surefire-plugin</artifactId>
 					<version>3.5.2</version>
-					<configuration>
-						<test><!-- your test suite class name should be here -->
-						</test>
-					</configuration>
 				</plugin>
 			</plugins>
 		</pluginManagement>
@@ -115,29 +140,25 @@
 	<inceptionYear>1998</inceptionYear>
 
 	<dependencies>
-
+		<!-- log4j is only used for testing, Log4JLogger accesses it by reflection at runtime.
+		     2.13.2 was vulnerable to Log4Shell (CVE-2021-44228). -->
 		<dependency>
 			<groupId>org.apache.logging.log4j</groupId>
 			<artifactId>log4j-api</artifactId>
-			<version>2.13.2</version>
+			<version>${log4j.version}</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.logging.log4j</groupId>
 			<artifactId>log4j-core</artifactId>
-			<version>2.13.2</version>
+			<version>${log4j.version}</version>
 			<scope>test</scope>
 		</dependency>
+		<!-- junit-jupiter includes the API (to compile tests) and the engine (to run them) -->
 		<dependency>
 			<groupId>org.junit.jupiter</groupId>
-			<artifactId>junit-jupiter-engine</artifactId>
-			<version>5.9.1</version>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.junit.platform</groupId>
-			<artifactId>junit-platform-suite-engine</artifactId>
-			<version>1.9.1</version>
+			<artifactId>junit-jupiter</artifactId>
+			<version>${junit.version}</version>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>

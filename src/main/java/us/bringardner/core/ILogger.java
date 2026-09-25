@@ -20,6 +20,8 @@
 
 package us.bringardner.core;
 
+import java.util.function.Supplier;
+
 
 /**
  * 
@@ -170,5 +172,52 @@ public interface ILogger {
 	 */
 
 	public boolean isWarnEnabled();
+
+
+	/*
+	 * Lazy versions of the logging methods.  The message is only created when the level is enabled,
+	 * so callers don't pay for string concatenation when logging is turned off.
+	 * Example: logger.debug(() -> "value="+expensiveCall());
+	 */
+
+	/**
+	 * generate a log entry if isDebugEnabled() returns true.
+	 * @param msg supplies the message (only called if debug is enabled)
+	 */
+	default void debug(Supplier<String> msg) {
+		if( isDebugEnabled() ) {
+			debug(msg.get());
+		}
+	}
+
+	/**
+	 * generate a log entry if isInfoEnabled() returns true.
+	 * @param msg supplies the message (only called if info is enabled)
+	 */
+	default void info(Supplier<String> msg) {
+		if( isInfoEnabled() ) {
+			info(msg.get());
+		}
+	}
+
+	/**
+	 * generate a log entry if isWarnEnabled() returns true.
+	 * @param msg supplies the message (only called if warn is enabled)
+	 */
+	default void warn(Supplier<String> msg) {
+		if( isWarnEnabled() ) {
+			warn(msg.get());
+		}
+	}
+
+	/**
+	 * generate a log entry if isErrorEnabled() returns true.
+	 * @param msg supplies the message (only called if error is enabled)
+	 */
+	default void error(Supplier<String> msg) {
+		if( isErrorEnabled() ) {
+			error(msg.get());
+		}
+	}
 
 }

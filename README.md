@@ -5,8 +5,8 @@
  
 
  Dependencies:  
-&emsp;Java 9 or greater  
-&emsp;Testing: log4j 2.13.2 or greater  
+&emsp;Java 11 or greater  
+&emsp;Testing: log4j 2.24.3 or greater (optional at runtime, detected automatically)  
 &emsp;Compile: None  
 &emsp;Runtime: None  
  
