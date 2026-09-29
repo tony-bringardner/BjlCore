@@ -135,8 +135,8 @@ public class DatePanel extends javax.swing.JPanel implements ComponentId {
 		setLayout(new java.awt.BorderLayout());
 
 		monthCombo.setModel(new javax.swing.DefaultComboBoxModel<String>(new String[] {
-				"January", "Febuary", "March", "April", "May", "June", "July",
-				"August", "Septemper", "October", "November", "December" }));
+				"January", "February", "March", "April", "May", "June", "July",
+				"August", "September", "October", "November", "December" }));
 		//monthCombo.setPreferredSize(new java.awt.Dimension(100, 25));
 		monthCombo.addActionListener(new java.awt.event.ActionListener() {
 			public void actionPerformed(java.awt.event.ActionEvent evt) {

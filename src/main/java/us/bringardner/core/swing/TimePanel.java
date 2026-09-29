@@ -457,9 +457,6 @@ public class TimePanel extends JPanel implements ComponentId {
 	
 	@Override
 	public void updateUI() {
-		System.out.println("Before="+
-					calculatePreferdSize()
-		);
 		super.updateUI();
 		
 	}

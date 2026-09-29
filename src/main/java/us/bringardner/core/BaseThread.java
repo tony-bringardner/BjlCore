@@ -176,15 +176,14 @@ public abstract class BaseThread extends SecureBaseObject implements Runnable {
 	/**
 	 * Set the daemon flag.  
 	 * The JVM will terminate when on 'non-daemon' threads have terminated.
+	 * A running thread's daemon status can't be changed, so the value is used
+	 * the next time the thread is started.
 	 * 
 	 * @param daemon
 	 * @see java.lang.Thread#setDaemon(boolean daemon) 
 	 */
 	public void setDaemon(boolean daemon) {
 		this.daemon = daemon;
-		if( thread != null ) {
-			this.thread.setDaemon(daemon);
-		}
 	}
 
 	/**

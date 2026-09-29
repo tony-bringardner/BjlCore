@@ -197,16 +197,18 @@ public class DateAndTimeDialog extends javax.swing.JDialog implements ICalendarD
 
 	public Date showDialog(Date date, String label, Point p) {
 		//  Center on this point
+		//  Work on a copy so the caller's Point is not changed
+		Point loc = new Point(p);
 		int w = getWidth() / 2;
 		int h = getHeight() / 2;
-		if ((p.x -= h) < 0) {
-			p.x = 0;
+		if ((loc.x -= w) < 0) {
+			loc.x = 0;
 		}
-		if ((p.y -= w) < 0) {
-			p.y = 0;
+		if ((loc.y -= h) < 0) {
+			loc.y = 0;
 		}
 
-		setLocation(p);
+		setLocation(loc);
 		return showDialog(date,label);
 	}
 

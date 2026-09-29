@@ -114,8 +114,8 @@ public class Clock extends JPanel implements MouseListener, MouseMotionListener 
 		addMouseMotionListener(this);
 		Calendar currTime = Calendar.getInstance();
 		currTime.setTimeInMillis(date);
-		hour = currTime.get(Calendar.HOUR_OF_DAY);
-		mhour = hour;
+		//  hour holds the 12 hour value, mhour the offset (0 or 12) to the hour of day
+		setHour(currTime.get(Calendar.HOUR_OF_DAY));
 		minute = currTime.get(Calendar.MINUTE);
 		seconds = currTime.get(Calendar.SECOND);
 		milliSeconds = currTime.get(Calendar.MILLISECOND);
@@ -559,7 +559,7 @@ public class Clock extends JPanel implements MouseListener, MouseMotionListener 
 	public void setHour(int hour) {
 		this.hour = hour;
 		if( hour > 12) {
-			mhour = 11;
+			mhour = 12;
 			this.hour = hour - 12;
 		} else {
 			mhour = 0;

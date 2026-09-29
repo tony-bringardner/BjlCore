@@ -21,6 +21,7 @@
 		<maven.compiler.release>11</maven.compiler.release>
 		<junit.version>5.11.4</junit.version>
 		<log4j.version>2.24.3</log4j.version>
+		<jacoco.version>0.8.15</jacoco.version>
 	</properties>
 
 	<build>
@@ -41,6 +42,11 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-source-plugin</artifactId>
+			</plugin>
+			<!-- Code coverage: 'mvn verify' writes the report to target/site/jacoco/index.html -->
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
 			</plugin>
 		</plugins>
 
@@ -122,6 +128,31 @@
 					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-surefire-plugin</artifactId>
 					<version>3.5.2</version>
+					<!-- If an argLine is ever added here, write it as <argLine>@{argLine} ...</argLine>
+					     so it does not replace the JaCoCo agent set by prepare-agent. -->
+				</plugin>
+
+				<plugin>
+					<groupId>org.jacoco</groupId>
+					<artifactId>jacoco-maven-plugin</artifactId>
+					<version>${jacoco.version}</version>
+					<executions>
+						<!-- Attaches the JaCoCo agent to the surefire test JVM -->
+						<execution>
+							<id>prepare-agent</id>
+							<goals>
+								<goal>prepare-agent</goal>
+							</goals>
+						</execution>
+						<!-- HTML, XML and CSV reports in target/site/jacoco -->
+						<execution>
+							<id>report</id>
+							<phase>verify</phase>
+							<goals>
+								<goal>report</goal>
+							</goals>
+						</execution>
+					</executions>
 				</plugin>
 			</plugins>
 		</pluginManagement>
