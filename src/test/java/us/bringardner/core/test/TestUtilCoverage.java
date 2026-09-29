@@ -41,13 +41,9 @@ import us.bringardner.core.util.ThreadSafeDateFormat;
  */
 public class TestUtilCoverage {
 
-	/** Exposes the protected init() method. */
 	static class Client extends SocketClient {
 		Client() {
 			super();
-		}
-		void callInit() {
-			init();
 		}
 	}
 
@@ -58,9 +54,6 @@ public class TestUtilCoverage {
 		}
 		Server(boolean secure) {
 			super(secure);
-		}
-		void callInit() {
-			init();
 		}
 		@Override
 		public void run() {
@@ -103,13 +96,11 @@ public class TestUtilCoverage {
 		System.setProperty(key, "true");
 		try {
 			Client client = new Client();
-			client.callInit();
 			assertTrue(client.isSoLinger());
 		} finally {
 			System.clearProperty(key);
 		}
 		Client client = new Client();
-		client.callInit();
 		assertFalse(client.isSoLinger());
 	}
 
@@ -218,7 +209,6 @@ public class TestUtilCoverage {
 			System.setProperty(linger, "TRUE");
 			System.setProperty(bind, "127.0.0.1");
 			Server svr = new Server();
-			svr.callInit();
 			assertTrue(svr.isSoLinger());
 			assertEquals("127.0.0.1", svr.getBindAddr().getHostAddress());
 
@@ -226,14 +216,13 @@ public class TestUtilCoverage {
 			Server bad = new Server();
 			RecordingLogger rec = new RecordingLogger();
 			bad.setLogger(rec);
-			assertThrows(IllegalStateException.class, bad::callInit);
+			assertThrows(IllegalStateException.class, bad::getBindAddr);
 			assertTrue(rec.messages.get(0).startsWith("ERROR Cannot create BindAddress"), "The error should be logged");
 		} finally {
 			System.clearProperty(linger);
 			System.clearProperty(bind);
 		}
 		Server svr = new Server();
-		svr.callInit();
 		assertFalse(svr.isSoLinger());
 		assertNull(svr.getBindAddr());
 	}
@@ -323,6 +312,40 @@ public class TestUtilCoverage {
 			unbounded.put(idx, idx);
 		}
 		assertEquals(100, unbounded.size(), "A max size of 0 means no limit");
+	}
+
+	@Test
+	public void testLruMapSetMaxSizeZeroMeansNoLimit() {
+		LruMap<Integer, Integer> map = new LruMap<>(5);
+		for(int idx = 0; idx < 5; idx++) {
+			map.put(idx, idx);
+		}
+		map.setMaxSize(0);
+		assertEquals(5, map.size(), "Removing the limit must not remove entries");
+		for(int idx = 5; idx < 50; idx++) {
+			map.put(idx, idx);
+		}
+		assertEquals(50, map.size());
+		map.setMaxSize(-1);
+		assertEquals(50, map.size());
+	}
+
+	@Test
+	public void testLogHelperProperties() {
+		//  From the properties file of the class (us/bringardner/core/test/TestCore.properties)
+		LogHelper forClass = new LogHelper(TestCore.class);
+		assertEquals("1", forClass.getProperty("Value01"));
+
+		//  System properties with the class name (or the name) as the prefix
+		String key = TestUtilCoverage.class.getName()+".LogHelperValue";
+		System.setProperty(key, "fromPrefix");
+		try {
+			assertEquals("fromPrefix", new LogHelper(TestUtilCoverage.class).getProperty("LogHelperValue"));
+			assertEquals("fromPrefix", new LogHelper(TestUtilCoverage.class.getName()).getProperty("LogHelperValue"));
+		} finally {
+			System.clearProperty(key);
+		}
+		assertNull(new LogHelper("no.such.Name").getProperty("LogHelperValue"));
 	}
 
 	@Test

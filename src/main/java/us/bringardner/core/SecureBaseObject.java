@@ -60,8 +60,6 @@ public class SecureBaseObject extends BaseObject {
 	public static final String PROPERTY_PROTOCOL = "Protocol";
 	public static final String PROPERTY_SECURE = "secure";
 	public static final String PROTOCOL_TLS = "TLS";	
-	//  This is used to FORCE java to use Some something besides TSLv1.3 as some clients don't support it
-	public static final String PROPERTY_FORCE_TLS_VERSION = "ForceTlsVersion";
 
 	private static volatile TrustManager [] defaultTrustManagers = null;
 
@@ -139,26 +137,11 @@ public class SecureBaseObject extends BaseObject {
 
 
 	/**
-	 * Initialize fields that can't use lazy initialization (the 'secure' flag).
-	 * 
-	 */
-	protected void init() {
-		String tmp = null;
-
-		if( (tmp = getProperty(PROPERTY_SECURE)) != null ) {
-			secure = tmp.trim().equalsIgnoreCase("true");
-		}
-
-	}
-
-	/**
 	 * @return An SSLContext initialized based on the current configuration. 
 	 * A properly configured SSLContext may be used for both client and server
 	 * secure connections. 
 	 *  
-	 * @throws CertificateException
-	 * 
-	 * @throws IOException
+	 * @throws IOException if the SSLContext can't be created (the cause has the details).
 	 */
 	public SSLContext getSSLContext() throws IOException {
 
@@ -282,13 +265,10 @@ public class SecureBaseObject extends BaseObject {
 	}
 
 	/**
-	 * @param passphrase
+	 * @param passphrase used to load the KeyStore (only the first time, the KeyStore is cached).
 	 * @return the KeyStore used to initialize the SSLContext.
 	 * 
-	 * @throws KeyStoreException
-	 * @throws IOException
-	 * @throws NoSuchAlgorithmException
-	 * @throws CertificateException
+	 * @throws IOException if the KeyStore can't be loaded (the cause has the details).
 	 */
 	public KeyStore getKeyStore(char[] passphrase) throws IOException {
 

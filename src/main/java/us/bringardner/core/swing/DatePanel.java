@@ -103,19 +103,6 @@ public class DatePanel extends javax.swing.JPanel implements ComponentId {
 		return cal.getTime();
 	}
 
-	public static void main(String[] args) {
-		JFrame frame = new JFrame("Date Test");
-		frame.setSize(250, 275);
-		frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-
-		DatePanel edit = new DatePanel();
-		frame.getContentPane().add(edit);
-		
-		frame.setLocationRelativeTo(null);
-		frame.pack();
-		frame.setVisible(true);
-
-	}
 
 	/** 
 	 * This method is called from within the constructor to

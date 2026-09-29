@@ -114,7 +114,7 @@ public class BaseObject {
 	 * @return the propertyPrefix for this Object
 	 * @see #getProperty(String)
 	 * @see #getProperty(String, String)
-	 * @See {@link #isSupportPrefixProperty()}
+	 * @see #isSupportPrefixProperty()
 	 */
 	protected String getPropertyPrefix() {
 		if( !isSupportPrefixProperty()) {
@@ -139,7 +139,7 @@ public class BaseObject {
 	 * @param propertyPrefix
 	 * @see BaseObject#getProperty(String)
 	 * @see #getProperty(String, String)
-	 * @See {@link #isSupportPrefixProperty()}
+	 * @see #isSupportPrefixProperty()
 	 */
 	protected void setPropertyPrefix(String propertyPrefix) {
 		this.propertyPrefix = propertyPrefix;
@@ -208,43 +208,20 @@ public class BaseObject {
 	}
 
 	/**
-	 * <PRE>
-	 * Properties can be defined at multiple levels and can be controlled 
-	 * both by the property name and the location or property file. 
-	 * 
-	 * First, the property name is prepended with the fully qualified class name.
-	 * 
-	 *  The a search is initiated by iterating through the 'dot' notation of the name.
-	 *  Example:  In the class us.bringardner.TestClass, a call to getProperties("propertyName")
-	 *  			would start the search looking for "us.bringardner.Test.propertyName".
-	 *  			The search will then iterate through the 'dot' names until a property is is found
-	 *  			or the end is reached.
-	 *  
-	 *    			Every iteration will search first in the System.properteis.  If the property
-	 *    			is not found, we look for a property file with the appropriate name.  If such a file exists,
-	 *    			the file is checked for a property with that name. 
-	 *  	
-	 *  In our example any of these properties could be used to set the value.
-	 *  	us.bringardner.TestClass.propertyName
-	 *  	us.bringardner.propertyName
-	 *  	com.propertyName
-	 *  	propertyName
-	 *  
-	 *  Using this method you can configure some properties at a very broad level where many classes would share 
-	 *  the same configuration or set a property the is very specific for one class.  
-	 *    
-	 * At each level of the naming structure (dot notation) a properties file may exist 
-	 * in the class path.  If so, it will be included in the search.  
-	 *   
-	 * In our example, the following locations could be defined (and searched in this order);
-	 * 		System.properties
-	 *  	us.bringardner.TestClass.properties
-	 *  	us.bringardner.properties
-	 *  	com.properties
-	 *  </PRE>
-	 *  
+	 * Find a property. The first value found is returned:
+	 * <ol>
+	 * <li>The system property <code>prefix.propertyName</code>, where the prefix is the class name
+	 *     (see {@link #getPropertyPrefix()} and {@link #setSupportPrefixProperty(boolean)}).</li>
+	 * <li>The system property <code>propertyName</code>.</li>
+	 * <li>The properties file named after the class (for example <code>/com/example/Mailer.properties</code>),
+	 *     checking <code>prefix.propertyName</code> then <code>propertyName</code>. Then the properties
+	 *     files of each super class, up to (not including) BaseObject. Inner classes use the file of
+	 *     their outer class.</li>
+	 * </ol>
+	 * Properties files are cached, see {@link #setMaxProperties(int)} and {@link #clearPropertyCache()}.
+	 *
 	 * @param propertyName Name of the property
-	 * @return the value associated with the given name in the properties for this Object, or null.
+	 * @return the value of the property, or null if it is not defined.
 	 */
 	public String getProperty(String propertyName) {
 		return getProperty(propertyName,null);
@@ -268,6 +245,22 @@ public class BaseObject {
 	}
 
 
+	/**
+	 * The class whose properties files are searched by {@link #getProperty(String, String)}
+	 * (then its super classes, up to BaseObject). The default is the class of this object.
+	 * 
+	 * @return the class to start the properties file search from.
+	 */
+	protected Class<?> getPropertyClass() {
+		return getClass();
+	}
+
+	/**
+	 * @param propertyName Name of the property
+	 * @param defaultValue returned if the property is not found
+	 * @return the value of the property, or defaultValue.
+	 * @see #getProperty(String)
+	 */
 	public String getProperty(String propertyName,String defaultValue) {
 		String ret = null;
 		
@@ -283,8 +276,8 @@ public class BaseObject {
 
 		if( ret == null ) {
 
-			Class<?> cls = getClass();
-			while(ret == null && cls != BaseObject.class) {
+			Class<?> cls = getPropertyClass();
+			while(ret == null && cls != null && cls != BaseObject.class) {
 				String path = cls.getName();
 				int idx = path.indexOf('$');
 				if( idx > 0) {
@@ -442,6 +435,15 @@ public class BaseObject {
 	}
 
 	/**
+	 * The message is only created if Error logging is enabled.
+	 * 
+	 * @param msg Supplies the message to log if Error logging is enabled
+	 */
+	public void logError(Supplier<String> msg) {
+		getLogger().error(msg);
+	}
+
+	/**
 	 * @param msg The message to log if Error logging is enabled
 	 * @param error The stack trace of the error is logged if Error is enabled 
 	 */
@@ -454,6 +456,15 @@ public class BaseObject {
 	 * @param msg The message to log if Warn logging is enabled
 	 */
 	public void logWarn(String msg) {
+		getLogger().warn(msg);
+	}
+
+	/**
+	 * The message is only created if Warn logging is enabled.
+	 * 
+	 * @param msg Supplies the message to log if Warn logging is enabled
+	 */
+	public void logWarn(Supplier<String> msg) {
 		getLogger().warn(msg);
 	}
 

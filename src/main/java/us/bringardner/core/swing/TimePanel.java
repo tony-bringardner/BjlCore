@@ -87,27 +87,6 @@ public class TimePanel extends JPanel implements ComponentId {
 	private Dimension analogPreferdSize = new Dimension(200, 200);
 	private boolean showAnalog=true;
 
-	public static void main(String args[] ) {
-		TimePanel panel = new TimePanel();
-		
-		//panel.setEditSeconds(true);
-		//panel.setEditMilliSeconds(true);
-		//panel.setShowAnalog(true);
-		
-		
-		final JFrame frame = new JFrame();
-		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);		
-		frame.getContentPane().add(panel);
-		frame.setLocationRelativeTo(null);
-		frame.pack();
-		SwingUtilities.invokeLater(new Runnable() {
-
-			@Override
-			public void run() {
-				frame.setVisible(true);				
-			}
-		});
-	}
 
 
 

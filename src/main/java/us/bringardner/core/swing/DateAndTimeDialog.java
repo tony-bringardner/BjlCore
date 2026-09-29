@@ -158,24 +158,6 @@ public class DateAndTimeDialog extends javax.swing.JDialog implements ICalendarD
 		dispose();
 	}
 
-	/**
-	 * @param args the command line arguments
-	 */
-	public static void main(String args[]) {
-		java.awt.EventQueue.invokeLater(new Runnable() {
-			public void run() {
-				DateAndTimeDialog dialog = new DateAndTimeDialog();
-				dialog.addWindowListener(new java.awt.event.WindowAdapter() {
-					public void windowClosing(java.awt.event.WindowEvent e) {
-						System.exit(0);
-					}
-				});
-				dialog.setLocationRelativeTo(null);
-				Date date = dialog.showDialog(new Date(),"Test Label");
-				System.out.println("Date = " + date);
-			}
-		});
-	}
 
 
 

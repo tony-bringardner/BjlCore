@@ -30,7 +30,7 @@ BjlCore is published to GitHub Packages:
 <dependency>
     <groupId>us.bringardner</groupId>
     <artifactId>bjl_core</artifactId>
-    <version>0.1.2</version>
+    <version>1.1.0</version>
 </dependency>
 ```
 

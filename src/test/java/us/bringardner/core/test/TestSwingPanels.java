@@ -24,7 +24,6 @@ import javax.swing.border.LineBorder;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import us.bringardner.core.swing.Clock;
@@ -107,7 +106,6 @@ public class TestSwingPanels {
 		assertTrue(new Clock().getHour() >= 1);
 	}
 
-	@Disabled("Bug: Clock.setHour() sets mhour to 11 instead of 12 for PM hours, so getHourOfDay() is off by one")
 	@Test
 	public void testClockHourOfDayAfternoon() {
 		Clock clock = new Clock();
@@ -116,7 +114,6 @@ public class TestSwingPanels {
 		assertEquals(15, clock.getHourOfDay());
 	}
 
-	@Disabled("Bug: Clock.init() sets mhour to the hour of day, so getHourOfDay() is wrong for any time after 00:59")
 	@Test
 	public void testClockHourOfDayFromConstructor() {
 		Clock clock = new Clock(date(2020, Calendar.JANUARY, 1, 15, 0, 0, 0).getTime());
@@ -385,7 +382,7 @@ public class TestSwingPanels {
 
 		DateTimeCombo combo = new DateTimeCombo();
 		assertEquals(new Date(1392699600000L), combo.getDate());
-		combo.setdate(date);
+		combo.setDate(date);
 		assertEquals(date, combo.getDate());
 		assertNull(combo.getLabel());
 		combo.setLabel("When");

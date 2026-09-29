@@ -61,15 +61,17 @@ public class TestBaseObjectCoverage {
 		obj.logInfo(() -> "i2");
 		obj.logInfo("i3", err);
 		obj.logWarn("w1");
-		obj.logWarn("w2", err);
+		obj.logWarn(() -> "w2");
+		obj.logWarn("w3", err);
 		obj.logError("e1");
-		obj.logError("e2", err);
+		obj.logError(() -> "e2");
+		obj.logError("e3", err);
 
 		assertEquals(Arrays.asList(
 				"DEBUG d1", "DEBUG d2", "DEBUG d3 boom",
 				"INFO i1", "INFO i2", "INFO i3 boom",
-				"WARN w1", "WARN w2 boom",
-				"ERROR e1", "ERROR e2 boom"), rec.messages);
+				"WARN w1", "WARN w2", "WARN w3 boom",
+				"ERROR e1", "ERROR e2", "ERROR e3 boom"), rec.messages);
 
 		assertTrue(obj.isDebugEnabled());
 		assertTrue(obj.isInfoEnabled());
@@ -86,6 +88,11 @@ public class TestBaseObjectCoverage {
 		rec.messages.clear();
 		obj.logDebug(() -> { throw new IllegalStateException("must not be called"); });
 		obj.logInfo(() -> { throw new IllegalStateException("must not be called"); });
+		assertTrue(rec.messages.isEmpty());
+
+		rec.setLevel(Level.NONE);
+		obj.logWarn(() -> { throw new IllegalStateException("must not be called"); });
+		obj.logError(() -> { throw new IllegalStateException("must not be called"); });
 		assertTrue(rec.messages.isEmpty());
 	}
 

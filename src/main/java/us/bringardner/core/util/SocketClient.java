@@ -135,16 +135,6 @@ public class SocketClient extends SecureBaseObject {
 		factory = null;
 	}
 
-	@Override
-	protected void init() {
-		super.init();
-		String tmp = null;
-
-		if( (tmp = getProperty(PROPERTY_IS_SO_LINGER)) != null ) {
-			isSoLinger = tmp.trim().equalsIgnoreCase("true");
-		}
-
-	}
 
 	/**
 	 * @return the time to linger on a Socket.close()

@@ -39,14 +39,38 @@ import us.bringardner.core.ILogger;
  */
 public class LogHelper extends BaseObject {
 	
-	private String name;
-	
+	private final String name;
+	//  The class whose properties files are searched (null when only a name was given).
+	private final Class<?> propertyClass;
+
+	/**
+	 * Logging and properties for a class, as if it extended BaseObject:
+	 * properties are looked up with the class name as the prefix and in the
+	 * class's properties files.
+	 * 
+	 * @param cls the class to log and look up properties for.
+	 */
 	public LogHelper(Class<?> cls) {
-		this(cls.getName());
+		this.name = cls.getName();
+		this.propertyClass = cls;
+		setPropertyPrefix(name);
 	}
-	
+
+	/**
+	 * Logging and properties for a name. Properties are looked up with the name as the prefix
+	 * (for example name.Port) and without it (Port).
+	 * 
+	 * @param name the logger name and property prefix.
+	 */
 	public LogHelper(String name) {
 		this.name = name;
+		this.propertyClass = null;
+		setPropertyPrefix(name);
+	}
+
+	@Override
+	protected Class<?> getPropertyClass() {
+		return propertyClass != null ? propertyClass : super.getPropertyClass();
 	}
 
 	@Override

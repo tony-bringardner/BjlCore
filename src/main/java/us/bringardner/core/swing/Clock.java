@@ -432,9 +432,6 @@ public class Clock extends JPanel implements MouseListener, MouseMotionListener 
 					break;
 		} 
 		
-		if( hour <0 || hour > 23) {
-			System.out.println("Bad hr");
-		}
 		if(hour != lastHour) {
 			// calc the mhour
 			if( (hour == 1 && lastHour == 12) || (hour == 12 && lastHour == 1)) {
@@ -447,32 +444,6 @@ public class Clock extends JPanel implements MouseListener, MouseMotionListener 
 		}
 	}
 
-
-
-
-
-	/**
-	 * @param args
-	 */
-	public static void main(String[] args) {
-		final Clock clock = new Clock(System.currentTimeMillis());
-		
-		clock.setHour(15);
-		JFrame frame = new JFrame();
-		frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-		frame.add(clock);
-		frame.setSize(new Dimension(400,400));
-		frame.pack();
-		
-		frame.setVisible(true);
-		frame.addWindowListener(new WindowAdapter() {
-			public void windowClosed(WindowEvent e) {
-				System.out.println("hour="+clock.getHour());
-				System.out.println("hour="+clock.getHourOfDay());				
-			}
-		});
-		
-	}
 
 	
 	public void mouseClicked(MouseEvent event) {

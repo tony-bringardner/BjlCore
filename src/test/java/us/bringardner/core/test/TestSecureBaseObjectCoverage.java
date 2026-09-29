@@ -34,11 +34,7 @@ public class TestSecureBaseObjectCoverage {
 
 	private static final String PASSWORD = "changeit";
 
-	/** Exposes the protected init() method. */
 	static class Secure extends SecureBaseObject {
-		void callInit() {
-			init();
-		}
 	}
 
 	static class AcceptAll implements X509TrustManager {
@@ -80,13 +76,11 @@ public class TestSecureBaseObjectCoverage {
 		System.setProperty(key, " TRUE ");
 		try {
 			Secure obj = new Secure();
-			obj.callInit();
 			assertTrue(obj.isSecure());
 		} finally {
 			System.clearProperty(key);
 		}
 		Secure obj = new Secure();
-		obj.callInit();
 		assertFalse(obj.isSecure(), "Not secure unless configured");
 	}
 

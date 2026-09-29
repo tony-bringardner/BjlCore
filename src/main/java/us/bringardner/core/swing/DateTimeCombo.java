@@ -63,7 +63,7 @@ public class DateTimeCombo extends JPanel {
 
 
 
-	public void setdate(Date date) {
+	public void setDate(Date date) {
 		spinner.setModel(new SpinnerDateModel(date, null, null, Calendar.MILLISECOND));
 	}
 	

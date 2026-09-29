@@ -10,7 +10,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 
-import us.bringardner.core.util.ThreadSafeDateFormat;
 
 /**
  * <PRE>
@@ -48,12 +47,6 @@ public class BjlLogger extends BaseObject implements ILogger {
 	 */
 	public static final Level DEFAULT_LEVEL = Level.ERROR;
 	
-	/**
-	 * @deprecated no longer used for formatting log entries (it serialized all logging threads). 
-	 * Kept for compatibility.
-	 */
-	@Deprecated
-	public static final ThreadSafeDateFormat format = new ThreadSafeDateFormat("MM-dd-yyyy HH:mm:ss.SSS");
 
 	//  DateTimeFormatter is immutable and thread safe, so no locking is required.
 	private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("MM-dd-yyyy HH:mm:ss.SSS");

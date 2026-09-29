@@ -29,7 +29,7 @@ import java.util.function.Supplier;
  *  This is the interface to all Loggers used by the core package.
  *  The objective is to define an implementation neutral API that will
  *  provide the core functionality and may be implemented by any
- *  logging framework.  Specifically, log4j & java.util.logging.
+ *  logging framework.  Specifically, log4j and java.util.logging.
  *    
  *  The desire is that higher level components that use this library
  *  need not know or care what logging framework is used at runtime.

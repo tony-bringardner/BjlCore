@@ -29,7 +29,6 @@ import java.lang.Thread.UncaughtExceptionHandler;
  */
 public abstract class BaseThread extends SecureBaseObject implements Runnable {
 
-	public static final int DEFAULT_ERROR_SLEEP_TIME = 60000;
 	
 	//  the run method must set the running field to true
 	//  These fields are read and written by different threads so they MUST be volatile, 
@@ -42,10 +41,8 @@ public abstract class BaseThread extends SecureBaseObject implements Runnable {
 	private volatile String name;
 	private volatile boolean daemon=true;
 	private volatile int priority = -1;
-	private volatile boolean stopOnError = false;
 	
 	
-	private volatile int errorSleepTime = DEFAULT_ERROR_SLEEP_TIME;
 
 	private volatile ClassLoader contextClassLoader;
 
@@ -115,19 +112,6 @@ public abstract class BaseThread extends SecureBaseObject implements Runnable {
 		return contextClassLoader;
 	}
 
-	/**
-	 * @return the amount of time to sleep if we encounter an error isStopOnError() is false..  
-	 */
-	public int getErrorSleepTime() {
-		return errorSleepTime;
-	}
-
-	/**
-	 * @param errorSleepTime the amount of time (in milliseconds) to sleep if we encounter an error and isStopOnError() is false.
-	 */
-	public void setErrorSleepTime(int errorSleepTime) {
-		this.errorSleepTime = errorSleepTime;
-	}
 
 	/**
 	 * @return true is this thread is still running (until the run method terminates).
@@ -207,23 +191,6 @@ public abstract class BaseThread extends SecureBaseObject implements Runnable {
 		}
 	}
 
-		
-	/**
-	 * 
-	 * @return true is the thread should stop when an error is encountered.
-	 */
-	public boolean isStopOnError() {
-		return stopOnError;
-	}
-
-	/**
-	 * Set to true is the thread should stop when an error is encountered.
-	 * 
-	 * @param stopOnError
-	 */
-	public void setStopOnError(boolean stopOnError) {
-		this.stopOnError = stopOnError;
-	}
 
 
 	/**

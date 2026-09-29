@@ -47,7 +47,7 @@ public abstract class AbstractCoreServer extends BaseThread  {
 	
 	public static final int DEFAULT_PORT = 9200;
 
-	private static final String PROPERTY_PORT = "Port";
+	public static final String PROPERTY_PORT = "Port";
 
 	public static final String PROPERTY_ACCEPT_TIMEOUT = "AcceptTimeout";
 
@@ -120,25 +120,6 @@ public abstract class AbstractCoreServer extends BaseThread  {
 		super();
 	}
 
-	@Override
-	protected void init() {
-		super.init();
-		String tmp = null;
-
-		if( (tmp = getProperty(PROPERTY_IS_SO_LINGER)) != null ) {
-			isSoLinger = tmp.trim().equalsIgnoreCase("true");
-		}
-		
-		if( (tmp = getProperty(PROPERTY_BIND_ADDRESS)) != null ) {
-			try {
-				bindAddr = InetAddress.getByName(tmp.trim());
-				bindAddrConfigured = true;
-			} catch (UnknownHostException e) {
-				logError("Cannot create BindAddress.",e);
-				throw new IllegalStateException(e);
-			}
-		}
-	}
 	
 	/**
 	 * @return ServerSocket used by this Server
@@ -324,7 +305,7 @@ public abstract class AbstractCoreServer extends BaseThread  {
 
 	/**
 	 * The Server maintains a set of arbitrary values called attributes.  
-	 * The attributes may be set or retrieved by any clients via the IProcessor api.
+	 * Attributes are shared by every connection the server handles (the map is thread safe).
 	 * 
 	 * @param name
 	 * @return the Object associated with the named attribute.
@@ -335,7 +316,7 @@ public abstract class AbstractCoreServer extends BaseThread  {
 
 	/**
 	 * The Server maintains a set of arbitrary values called attributes.  
-	 * The attributes may be set or retrieved by any clients via the IProcessor api.
+	 * Attributes are shared by every connection the server handles (the map is thread safe).
 	 *  
 	 * @param name
 	 * @param attribute
@@ -351,7 +332,7 @@ public abstract class AbstractCoreServer extends BaseThread  {
 
 	/**
 	 * The Server maintains a set of arbitrary values called attributes.  
-	 * The attributes may be set or retrieved by any clients via the IProcessor api.
+	 * Attributes are shared by every connection the server handles (the map is thread safe).
 	 * 
 	 * @param name
 	 * @return the values of the attribute that was removed or null in none existed.

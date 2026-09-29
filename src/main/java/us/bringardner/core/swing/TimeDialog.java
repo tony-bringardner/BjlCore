@@ -116,24 +116,6 @@ public class TimeDialog extends javax.swing.JDialog implements ICalendarDialog {
 		dispose();
 	}
 
-	/**
-	 * @param args the command line arguments
-	 */
-	public static void main(String args[]) {
-		java.awt.EventQueue.invokeLater(new Runnable() {
-			public void run() {
-				TimeDialog dialog = new TimeDialog(new javax.swing.JFrame(),
-						true);
-				dialog.addWindowListener(new java.awt.event.WindowAdapter() {
-					public void windowClosing(java.awt.event.WindowEvent e) {
-						System.exit(0);
-					}
-				});
-				dialog.setLocationRelativeTo(null);
-				dialog.setVisible(true);
-			}
-		});
-	}
 	public Date showDialog(Date date,String label, Point p) {
 		setLocation(p);
 		return showDialog(date,label);

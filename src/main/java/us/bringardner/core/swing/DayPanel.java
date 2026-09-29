@@ -199,30 +199,7 @@ public class DayPanel extends JPanel implements ComponentId {
 		 comp.setPreferredSize(new Dimension(22,24));
 		return comp;
 	}
-	 
 
-	/**
-	 * @param args
-	 */
-	public static void main(String[] args) {
-
-		final JFrame frame = new JFrame("Day Test");
-		frame.setSize(200, 400);
-		frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-
-		DayPanel edit = new DayPanel();
-		frame.getContentPane().add(edit);
-		frame.setVisible(true);
-
-		frame.addWindowListener(new WindowAdapter() {
-
-			public void windowClosed(WindowEvent e) {
-				System.out.println(frame.getSize().toString());				
-			}
-			
-		});
-
-	}
 
 	@Override
 	public String getComponentName() {

@@ -63,8 +63,16 @@ public class LruMap<K,V> extends LinkedHashMap<K,V> {
 		return maxSize;
 	}
 
+	/**
+	 * @param maxSize the most entries the map keeps (0 or less: no limit).
+	 * When the new size is smaller, the least recently used entries are removed.
+	 */
 	public void setMaxSize(int maxSize) {
 		this.maxSize = maxSize;
+		if( maxSize <= 0 ) {
+			//  No limit (the same as the constructor), so nothing is removed.
+			return;
+		}
 		
 		int sz = size();
 		
@@ -96,51 +104,5 @@ public class LruMap<K,V> extends LinkedHashMap<K,V> {
 		return ret;
 	}
 
-	
-
-	public static void main(String [] args) {
-		LruMap<String, String> c = new LruMap<String, String>(5);
-		c.put ("1","one");                            // 1
-		c.put ("2","two");                            // 2 1
-		c.put ("3","three");                          // 3 2 1
-		c.put ("4","four");                           // 4 3 2 1
-		
-	
-		
-		if (c.get("2")==null) {       				  // 2 4 3 1
-			System.out.println("Error ");
-		}
-		
-		c.put ("5","five");                           // 5 2 4 3 1
-		c.put ("6","six");		 	                  // 6 5 2 4 3 
-		c.put ("4","second four");                    // 4 6 5 2 3 
-		// Verify cache content.
-		 
-		
-		if (!c.get("4").equals("second four")) {	  // 4 6 5 2 3
-			throw new Error();
-		}
-		if (!c.get("5").equals("five"))       {		// 5 4 6 2 3
-			throw new Error();
-		}
-		if (!c.get("2").equals("two"))        {		// 2 5 4 6 3
-			throw new Error();
-		}
-		
-		
-		// List cache content.
-		for (Iterator<String> it = c.keySet().iterator(); it.hasNext(); ) {
-			String key = it.next().toString();
-			System.out.println ("Step 1="+key); 
-		}
-		System.out.println();
-		c.setMaxSize(3);
-		
-		// List cache content.
-		for (Iterator<String> it = c.keySet().iterator(); it.hasNext(); ) {
-			String key = it.next().toString();
-			System.out.println ("Step 2="+key); 
-		}
-	}
 
 }

@@ -79,14 +79,6 @@ public class TestBaseThreadCoverage {
 	@Test
 	public void testSettersBeforeStart() {
 		Worker w = new Worker();
-		assertEquals(BaseThread.DEFAULT_ERROR_SLEEP_TIME, w.getErrorSleepTime());
-		w.setErrorSleepTime(10);
-		assertEquals(10, w.getErrorSleepTime());
-
-		assertFalse(w.isStopOnError());
-		w.setStopOnError(true);
-		assertTrue(w.isStopOnError());
-
 		assertFalse(w.isStopping());
 		assertEquals(-1, w.getPriority());
 	}
