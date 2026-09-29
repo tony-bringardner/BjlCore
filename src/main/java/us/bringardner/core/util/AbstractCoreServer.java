@@ -23,7 +23,7 @@ import us.bringardner.core.BaseThread;
  * requests for both secure and insecure channels and establishes a 
  * framework for managing sessions.
  * 
- * Copyright Tony Bringarder 1998, 2025 <A href="http://bringardner.us/tony">Tony Bringardner</A>
+ * Copyright 1998-2026 <A href="http://bringardner.us/tony">Tony Bringardner</A>
  * 
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");

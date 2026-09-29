@@ -1,6 +1,6 @@
 // ~version~V000.00.01-V000.00.00-
 /**
- * Copyright 1998-2009 Tony Bringardner
+ * Copyright 1998-2026 Tony Bringardner
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ import java.util.function.Supplier;
  *  The desire is that higher level components that use this library
  *  need not know or care what logging framework is used at runtime.
  *  
- * Copyright Tony Bringarder 1998, 2025 <A href="http://bringardner.us/tony">Tony Bringardner</A>
+ * Copyright 1998-2026 <A href="http://bringardner.us/tony">Tony Bringardner</A>
  * 
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");

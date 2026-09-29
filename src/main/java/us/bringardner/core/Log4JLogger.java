@@ -11,7 +11,7 @@ import java.util.Map;
  * <PRE>
  * An implementation of ILogger to wrap the log4j framework.
  * 
- * Copyright Tony Bringarder 1998, 2025 <A href="http://bringardner.us/tony">Tony Bringardner</A>
+ * Copyright 1998-2026 <A href="http://bringardner.us/tony">Tony Bringardner</A>
  * 
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");

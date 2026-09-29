@@ -32,7 +32,7 @@ import javax.net.ssl.TrustManager;
  *  A Client typically requires only the protocol to be properly configured.
  * 
  * 
- * Copyright Tony Bringarder 1998, 2025 <A href="http://bringardner.us/tony">Tony Bringardner</A>
+ * Copyright 1998-2026 <A href="http://bringardner.us/tony">Tony Bringardner</A>
  * 
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
@@ -392,13 +392,14 @@ public class SecureBaseObject extends BaseObject {
 
 
 	/**
-	 * @return the KeyStore type Example JKS,PKCS12
+	 * @return the KeyStore type Example JKS,PKCS12.
+	 * Defaults to the JVM default type (KeyStore.getDefaultType(), PKCS12 since Java 9).
 	 */
 	public String getKeyStoreType() {
 		if( keyStoreType == null ) {
 			synchronized (this) {
 				if( keyStoreType == null ) {
-					keyStoreType = getProperty(PROPERTY_KEY_STORE_TYPE);
+					keyStoreType = getProperty(PROPERTY_KEY_STORE_TYPE, KeyStore.getDefaultType());
 					logDebug(PROPERTY_KEY_STORE_TYPE+"="+keyStoreType);
 				}
 			}
@@ -407,13 +408,14 @@ public class SecureBaseObject extends BaseObject {
 	}
 
 	/**
-	 * @return the currently configured algorithm (Example SunX509)
+	 * @return the currently configured key manager algorithm (Example SunX509).
+	 * Defaults to the JVM default algorithm (KeyManagerFactory.getDefaultAlgorithm()).
 	 */
 	public String getAlgorithm() {
 		if( algorithm == null ) {
 			synchronized (this) {
 				if( algorithm == null ) {
-					algorithm = getProperty(PROPERTY_ALGORITHM);
+					algorithm = getProperty(PROPERTY_ALGORITHM, KeyManagerFactory.getDefaultAlgorithm());
 					logDebug(PROPERTY_ALGORITHM+"="+algorithm);
 				}
 			}

@@ -118,6 +118,29 @@ public class TestSecureBaseObjectCoverage {
 	}
 
 	@Test
+	public void testDefaultAlgorithmAndKeyStoreType() throws Exception {
+		Secure obj = new Secure();
+		assertEquals(KeyManagerFactory.getDefaultAlgorithm(), obj.getAlgorithm(), "The JVM default algorithm is used when none is configured");
+		assertEquals(KeyStore.getDefaultType(), obj.getKeyStoreType(), "The JVM default key store type is used when none is configured");
+
+		//  a key store file and password are all that is needed for a server context
+		Secure server = new Secure();
+		server.setKeyStoreFileName(createEmptyKeyStore(PASSWORD).getAbsolutePath());
+		server.setKeyStorePassword(PASSWORD);
+		assertNotNull(server.getKeyManagers());
+		assertNotNull(server.getSSLContext());
+
+		//  a configured value still wins
+		String key = Secure.class.getName()+"."+SecureBaseObject.PROPERTY_ALGORITHM;
+		System.setProperty(key, "SunX509");
+		try {
+			assertEquals("SunX509", new Secure().getAlgorithm());
+		} finally {
+			System.clearProperty(key);
+		}
+	}
+
+	@Test
 	public void testSetters() throws Exception {
 		Secure obj = new Secure();
 		SSLContext ctx = SSLContext.getInstance("TLS");
