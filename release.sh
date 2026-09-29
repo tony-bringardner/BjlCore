@@ -13,8 +13,8 @@
 #
 # Steps:
 #   1. Read the version from pom.xml
-#   2. Check: git repo, no unfinished merge, GitHub credentials in ~/.m2/settings.xml,
-#      tag not already used
+#   2. Check: git repo, no unfinished merge, GitHub CLI logged in, GitHub credentials
+#      in ~/.m2/settings.xml, tag not already used, git can push to the remote
 #   3. mvn clean deploy
 #   4. git commit (only if there are uncommitted changes), git tag v<version>,
 #      git push the current branch and the tag
@@ -22,13 +22,18 @@
 # Set the new version in pom.xml BEFORE running this script
 # (edit <version>, or: mvn versions:set -DnewVersion=0.1.2 -DgenerateBackupPoms=false).
 #
+# GitHub sign in uses the GitHub CLI (brew install gh). One time setup:
+#   gh auth login -s write:packages
+# The script then pushes with gh's credentials (no password prompt), and when
+# ~/.m2/settings.xml uses ${env.GITHUB_TOKEN} and it is not set, uses gh's token for Maven.
+#
 set -euo pipefail
 
 REMOTE="origin"
 DRY_RUN=false
 ASSUME_YES=false
 
-usage() { sed -n '3,20p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '3,28p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 
 while getopts "ynh" opt; do
 	case "$opt" in
@@ -53,6 +58,19 @@ run()  {
 
 command -v mvn >/dev/null 2>&1 || die "mvn is not on the PATH (see ~/.zshrc / Homebrew setup)."
 command -v git >/dev/null 2>&1 || die "git is not on the PATH."
+command -v gh  >/dev/null 2>&1 || die "The GitHub CLI (gh) is not on the PATH. Install it: brew install gh"
+gh auth status --hostname github.com >/dev/null 2>&1 \
+	|| die "The GitHub CLI is not logged in. Run: gh auth login -s write:packages"
+
+# git push through gh's credentials (for HTTPS remotes), whatever git's own credential
+# helper is. The empty helper clears any other helpers (e.g. osxkeychain) for this command.
+git_push() {
+	if [[ "$(git remote get-url "$REMOTE" 2>/dev/null)" == https://github.com/* ]]; then
+		git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push "$@"
+	else
+		git push "$@"
+	fi
+}
 
 # Work on the project in PROJECT_DIR (default: the current directory), starting from the
 # top of its git repository, so this works from any subfolder of the project.
@@ -117,7 +135,14 @@ if [[ ! -f "$SETTINGS" ]] || ! grep -q "<id>[[:space:]]*github[[:space:]]*</id>"
 	die "No <server> with <id>github</id> in $SETTINGS (Maven needs it to deploy to GitHub Packages)."
 fi
 if grep -q '\${env\.GITHUB_TOKEN}' "$SETTINGS" && [[ -z "${GITHUB_TOKEN:-}" ]]; then
-	die "$SETTINGS uses \${env.GITHUB_TOKEN}, but GITHUB_TOKEN is not set in this shell."
+	# Use the GitHub CLI's token. Publishing packages needs the write:packages scope.
+	GITHUB_TOKEN="$(gh auth token --hostname github.com 2>/dev/null)" \
+		|| die "Could not get a token from the GitHub CLI. Run: gh auth login -s write:packages"
+	export GITHUB_TOKEN
+	SCOPES="$(gh api -i user 2>/dev/null | tr -d '\r' | sed -n 's/^[Xx]-[Oo][Aa]uth-[Ss]copes: *//p')"
+	if [[ -n "$SCOPES" && "$SCOPES" != *write:packages* ]]; then
+		die "The GitHub CLI token can't publish packages (scopes: $SCOPES). Run: gh auth refresh -s write:packages"
+	fi
 fi
 
 SNAPSHOT=false
@@ -131,6 +156,12 @@ if ! $SNAPSHOT; then
 		die "Tag $TAG already exists on $REMOTE. Change the version in pom.xml first."
 	fi
 fi
+
+# Make sure the push at the end will work BEFORE anything is deployed
+# (sign in, access to the repository, and the branch is not behind the remote).
+info "Checking that git can push to $REMOTE"
+git_push --dry-run --quiet "$REMOTE" "$BRANCH" \
+	|| die "git can't push $BRANCH to $REMOTE (see above). Nothing was deployed."
 
 CHANGES="$(git status --porcelain --untracked-files=no)"
 
@@ -181,11 +212,11 @@ if ! $SNAPSHOT; then
 fi
 
 info "git push $REMOTE $BRANCH"
-run git push "$REMOTE" "$BRANCH"
+run git_push "$REMOTE" "$BRANCH"
 
 if ! $SNAPSHOT; then
 	info "git push $REMOTE $TAG"
-	run git push "$REMOTE" "$TAG"
+	run git_push "$REMOTE" "$TAG"
 fi
 
 echo
