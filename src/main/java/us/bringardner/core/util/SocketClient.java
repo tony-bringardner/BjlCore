@@ -27,6 +27,7 @@ package us.bringardner.core.util;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketException;
@@ -38,6 +39,9 @@ import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
 
 import javax.net.SocketFactory;
+import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
 
 import us.bringardner.core.SecureBaseObject;
 
@@ -69,8 +73,14 @@ public class SocketClient extends SecureBaseObject {
 	 */
 	public static final int DEFAULT_CONNECT_TIMEOUT = 60000;
 
+	/** "false" turns off the host name check for secure connections, see {@link #isVerifyHostname()}. */
+	public static final String PROPERTY_VERIFY_HOSTNAME = "VerifyHostname";
+
 
 	private volatile int lingerTime=-1;
+
+	//  null means the VerifyHostname property has not been read yet
+	private volatile Boolean verifyHostname;
 
 	private volatile int socketTimeout=-1;
 
@@ -92,9 +102,11 @@ public class SocketClient extends SecureBaseObject {
 
 
 	/**
-	 * 
+	 * When secure, the SSL sockets this factory makes check that the server's certificate
+	 * was issued for the host being connected to, unless {@link #isVerifyHostname()} is false.
+	 *
 	 * @return the SocketFactory that a client should use to connect to a server
-	 * 
+	 *
 	 * @throws KeyManagementException
 	 * @throws CertificateException
 	 * @throws FileNotFoundException
@@ -108,15 +120,105 @@ public class SocketClient extends SecureBaseObject {
 			synchronized(this) {
 				if( factory == null ) {
 					if( isSecure() ) {
-						factory = getSSLContext().getSocketFactory();						
+						SSLSocketFactory sf = getSSLContext().getSocketFactory();
+						factory = isVerifyHostname() ? new HostnameVerifyingFactory(sf) : sf;
 					} else {
 						factory = SocketFactory.getDefault();
 					}
 				}
 			}
 		}
-		
+
 		return factory;
+	}
+
+	/**
+	 * @return true (the default) if secure connections check that the server's certificate was
+	 *  issued for the host name (or address) being connected to. Without this check any certificate
+	 *  the trust managers accept is accepted for every host, so a server with any trusted
+	 *  certificate could pretend to be another.
+	 */
+	public boolean isVerifyHostname() {
+		Boolean ret = verifyHostname;
+		if( ret == null ) {
+			ret = getBooleanProperty(PROPERTY_VERIFY_HOSTNAME, true);
+			verifyHostname = ret;
+		}
+		return ret;
+	}
+
+	/**
+	 * Turn the host name check for secure connections on or off. Turn it off only for servers
+	 * whose certificate is known not to match the name used to reach them (a test certificate, say).
+	 *
+	 * @param verifyHostname
+	 */
+	public void setVerifyHostname(boolean verifyHostname) {
+		this.verifyHostname = verifyHostname;
+		//  The factory depends on it
+		factory = null;
+	}
+
+	/**
+	 * Turns on the HTTPS host name check (RFC 2818) for every socket the wrapped factory makes,
+	 * including connected sockets (the TLS handshake doesn't start until the socket is used).
+	 */
+	private static final class HostnameVerifyingFactory extends SSLSocketFactory {
+		private final SSLSocketFactory delegate;
+
+		HostnameVerifyingFactory(SSLSocketFactory delegate) {
+			this.delegate = delegate;
+		}
+
+		private static Socket verify(Socket socket) {
+			if( socket instanceof SSLSocket ) {
+				SSLSocket ssl = (SSLSocket) socket;
+				SSLParameters params = ssl.getSSLParameters();
+				params.setEndpointIdentificationAlgorithm("HTTPS");
+				ssl.setSSLParameters(params);
+			}
+			return socket;
+		}
+
+		@Override
+		public String[] getDefaultCipherSuites() {
+			return delegate.getDefaultCipherSuites();
+		}
+
+		@Override
+		public String[] getSupportedCipherSuites() {
+			return delegate.getSupportedCipherSuites();
+		}
+
+		@Override
+		public Socket createSocket() throws IOException {
+			return verify(delegate.createSocket());
+		}
+
+		@Override
+		public Socket createSocket(Socket s, String host, int port, boolean autoClose) throws IOException {
+			return verify(delegate.createSocket(s, host, port, autoClose));
+		}
+
+		@Override
+		public Socket createSocket(String host, int port) throws IOException {
+			return verify(delegate.createSocket(host, port));
+		}
+
+		@Override
+		public Socket createSocket(String host, int port, InetAddress localHost, int localPort) throws IOException {
+			return verify(delegate.createSocket(host, port, localHost, localPort));
+		}
+
+		@Override
+		public Socket createSocket(InetAddress host, int port) throws IOException {
+			return verify(delegate.createSocket(host, port));
+		}
+
+		@Override
+		public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort) throws IOException {
+			return verify(delegate.createSocket(address, port, localAddress, localPort));
+		}
 	}
 	
 

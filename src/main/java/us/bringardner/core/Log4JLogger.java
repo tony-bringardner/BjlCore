@@ -5,7 +5,10 @@ package us.bringardner.core;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.ServiceConfigurationError;
+import java.util.ServiceLoader;
 
 /**
  * <PRE>
@@ -107,6 +110,58 @@ public class Log4JLogger implements ILogger {
 		} catch (Throwable e) {
 			return false;
 		}
+	}
+
+	/**
+	 * Without a log4j2 implementation (a provider, such as log4j-core) the log4j2 API only prints
+	 * errors to the console, after a warning that it found no provider. So BaseObject only uses
+	 * Log4JLogger by default when this is true, and BjlLogger (which follows the LogLevel and LogFile
+	 * properties) otherwise.
+	 *
+	 * @return true if the log4j2 API and a log4j2 implementation are both in the class path.
+	 */
+	public static boolean isLog4jProviderAvailable() {
+		//  Check for a provider first: isLog4jAvailable() initializes log4j's LogManager, which prints the warning.
+		return ProviderCheck.AVAILABLE && isLog4jAvailable();
+	}
+
+	private static final class ProviderCheck {
+		static final boolean AVAILABLE = hasProvider(Log4JLogger.class.getClassLoader());
+	}
+
+	/**
+	 * Look for a log4j2 provider the way log4j2 does, without initializing log4j2.
+	 *
+	 * @param cl the class loader to search
+	 * @return true if a provider is configured or declared in the class path of cl
+	 */
+	static boolean hasProvider(ClassLoader cl) {
+		//  A provider (or context factory) named by a system property
+		for (String name : new String[] {"log4j.provider", "log4j2.provider", "log4j2.loggerContextFactory", "log4j2.LoggerContextFactory"}) {
+			if( System.getProperty(name) != null ) {
+				return true;
+			}
+		}
+
+		Class<?> providerClass;
+		try {
+			providerClass = Class.forName("org.apache.logging.log4j.spi.Provider", false, cl);
+		} catch (ClassNotFoundException | LinkageError e) {
+			//  No log4j2 API
+			return false;
+		}
+		try {
+			@SuppressWarnings({ "unchecked", "rawtypes" })
+			Iterator<?> it = ServiceLoader.load((Class) providerClass, cl).iterator();
+			if( it.hasNext() ) {
+				return true;
+			}
+		} catch (ServiceConfigurationError | RuntimeException | LinkageError e) {
+			//  A provider is declared but broken, let log4j2 report it (as it did before this check)
+			return true;
+		}
+		//  Providers declared the way log4j2 versions before 2.10 did
+		return cl != null && cl.getResource("META-INF/log4j-provider.properties") != null;
 	}
 
 	private volatile Object _logger;

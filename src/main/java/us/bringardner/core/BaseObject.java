@@ -158,10 +158,11 @@ public class BaseObject {
 	 * every time the getProperteis method is called.
 	 * 
 	 *  
+	 * @param cls the class whose properties these are (used if this object's class can't see the file)
 	 * @param name
 	 * @return the Properties associated with the given name.
 	 */
-	private Properties getPropertyEntry(String name) {
+	private Properties getPropertyEntry(Class<?> cls, String name) {
 		Properties ret;
 		synchronized (properties) {
 			ret = properties.get(name);
@@ -185,7 +186,13 @@ public class BaseObject {
 				 * Calling this.getClass().getResource(...) could give results other than expected if this class is extended by a class in another package
 				 * In this case we want that behavior.  It allows a property file to be replaced or overwritten by the extending class. 
 				 */
-				try(InputStream in = getClass().getResourceAsStream(fn)){
+				InputStream resource = getClass().getResourceAsStream(fn);
+				if( resource == null && cls != null && cls.getClassLoader() != getClass().getClassLoader() ) {
+					//  The class being searched may be in a class loader this object's class can't see
+					//  (a LogHelper or getPropertyClass() for a plugin class, for example).
+					resource = cls.getResourceAsStream(fn);
+				}
+				try(InputStream in = resource){
 					if( in != null ) {
 						ret  = new Properties();
 						ret.load(in);
@@ -283,7 +290,7 @@ public class BaseObject {
 				if( idx > 0) {
 					path = path.substring(0,idx);
 				}
-				Properties p = getPropertyEntry(path);
+				Properties p = getPropertyEntry(cls, path);
 				if( p != null ) {
 					if( prefix!=null ) {
 						ret = p.getProperty(prefix+"."+propertyName);
@@ -371,7 +378,8 @@ public class BaseObject {
 						}
 					}
 					if( loggerClass == null ) 	{						
-						loggerClass = Log4JLogger.isLog4jAvailable() ? Log4JLogger.class : BjlLogger.class;
+						//  Only with a log4j implementation, the log4j API alone would ignore our LogLevel and LogFile settings
+						loggerClass = Log4JLogger.isLog4jProviderAvailable() ? Log4JLogger.class : BjlLogger.class;
 					}
 				}
 			}

@@ -914,6 +914,8 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 		try {
 			SocketClient client = new SocketClient(useSSL);
 			client.setTrustManagers(mgr);
+			//  The test certificate is for bringardner.us and we connect to localhost (see TestConnectionReliability for the host name check)
+			client.setVerifyHostname(false);
 			SocketFactory factory = client.getSocketFactory();
 
 			Socket socket = factory.createSocket("localhost", port);

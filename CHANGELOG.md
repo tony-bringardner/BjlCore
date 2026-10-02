@@ -12,6 +12,15 @@
 - `SocketClient.getSocket()` had no connect timeout, so an unreachable host blocked for as long as the
   operating system kept trying (about 75 seconds on macOS, minutes on Linux). It also left the socket
   open if `configure()` threw. The socket is now closed on any failure.
+- A properties file for a class in another class loader (a plugin, say) was not found when the lookup
+  was made by an object whose class can't see that loader, such as `new LogHelper(PluginClass.class)`
+  or a `getPropertyClass()` override. If the file isn't found through the object's own class it is now
+  also looked for through the class being searched.
+- With only the log4j2 API on the class path (no log4j-core or other implementation), `BaseObject` still
+  chose `Log4JLogger`. log4j2 then printed a warning, logged only errors to the console and ignored the
+  `LogLevel` and `LogFile` properties. `BjlLogger` is now the default unless a log4j2 implementation is
+  found, and log4j2 isn't started just to find out. Naming `Log4JLogger` in the `ILogger` property still
+  uses it.
 
 ### Changed (may need a code change)
 
@@ -19,12 +28,20 @@
   `SocketException` when the server is stopped. Check `stopping` before treating it as an error.
 - `SocketClient.getSocket()` gives up after 60 seconds by default (the `ConnectTimeout` property,
   in milliseconds; 0 means no limit).
+- Secure `SocketClient` connections now check that the server's certificate was issued for the host
+  being connected to (as HTTPS does). Before, any certificate the trust managers accepted was accepted
+  for every host. This applies to sockets from `getSocketFactory()` as well as `getSocket()`. A server
+  whose certificate doesn't match the name used to reach it (a test certificate, or connecting by IP
+  address to a certificate without that address) now fails the TLS handshake; set the `VerifyHostname`
+  property to false, or call `setVerifyHostname(false)`, for those.
 
 ### Added
 
 - `AbstractCoreServer.closeServerSocket()`.
 - `SocketClient.getConnectTimeout()`/`setConnectTimeout(int)`, `PROPERTY_CONNECT_TIMEOUT` and
   `DEFAULT_CONNECT_TIMEOUT`.
+- `SocketClient.isVerifyHostname()`/`setVerifyHostname(boolean)` and `PROPERTY_VERIFY_HOSTNAME`.
+- `Log4JLogger.isLog4jProviderAvailable()`.
 - `BaseThread` can run on virtual threads on Java 21+ (multi-release jar; see `BaseThread.VIRTUAL_THREADS_PROPERTY`).
 - `BaseThread.isAlive()`.
 
