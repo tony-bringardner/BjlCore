@@ -111,6 +111,29 @@ public class TestBaseThreadVirtual {
 	}
 
 	@Test
+	public void isAliveFollowsTheThread() throws Exception {
+		CountDownLatch release = new CountDownLatch(1);
+		BaseThread w = new BaseThread() {
+			@Override
+			public void run() {
+				// deliberately doesn't set running/started
+				try {
+					release.await();
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+				}
+			}
+		};
+		assertFalse(w.isAlive(), "not started");
+		w.start();
+		assertTrue(w.isAlive());
+		assertFalse(w.isRunning(), "run() didn't set running");
+		release.countDown();
+		w.join(5000);
+		assertFalse(w.isAlive());
+	}
+
+	@Test
 	public void createThreadHookSuppliesTheThread() throws Exception {
 		AtomicInteger calls = new AtomicInteger();
 		AtomicReference<Boolean> asked = new AtomicReference<>();

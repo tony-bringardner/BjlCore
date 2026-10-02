@@ -442,6 +442,17 @@ public abstract class BaseThread extends SecureBaseObject implements Runnable {
 	}
 
 	/**
+	 * Unlike {@link #isRunning()} (which the run method maintains), this asks the thread itself,
+	 * so it is also right for subclasses that don't set the running field.
+	 * 
+	 * @return true if the thread started by {@link #start()} has not terminated
+	 */
+	public boolean isAlive() {
+		Thread current = thread;
+		return current != null && current.isAlive();
+	}
+
+	/**
 	 * When implementing the run method, make sure to use the variable started, running and stopping 
 	 * to coordinate activities like this.
 	 *  
