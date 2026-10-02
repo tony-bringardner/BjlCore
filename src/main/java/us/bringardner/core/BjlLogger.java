@@ -48,6 +48,13 @@ public class BjlLogger extends BaseObject implements ILogger {
 	public static final Level DEFAULT_LEVEL = Level.ERROR;
 	
 
+	/**
+	 * @deprecated no longer used for formatting log entries (it serialized all logging threads).
+	 * Removed in 1.1.0 and restored in 1.2.0 for compatibility (BJL-53).
+	 */
+	@Deprecated
+	public static final us.bringardner.core.util.ThreadSafeDateFormat format = new us.bringardner.core.util.ThreadSafeDateFormat("MM-dd-yyyy HH:mm:ss.SSS");
+
 	//  DateTimeFormatter is immutable and thread safe, so no locking is required.
 	private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("MM-dd-yyyy HH:mm:ss.SSS");
 

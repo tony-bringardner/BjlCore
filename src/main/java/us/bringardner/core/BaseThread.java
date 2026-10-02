@@ -41,6 +41,14 @@ public abstract class BaseThread extends SecureBaseObject implements Runnable {
 	private volatile String name;
 	private volatile boolean daemon=true;
 	private volatile int priority = -1;
+
+	/**
+	 * @deprecated not used by BaseThread; restored in 1.2.0 for compatibility (BJL-53).
+	 */
+	@Deprecated
+	public static final int DEFAULT_ERROR_SLEEP_TIME = 60000;
+	private volatile boolean stopOnError = false;
+	private volatile int errorSleepTime = DEFAULT_ERROR_SLEEP_TIME;
 	
 	
 
@@ -295,6 +303,46 @@ public abstract class BaseThread extends SecureBaseObject implements Runnable {
 	 */
 	protected Thread createThread(boolean virtual) {
 		return Threads.create(this, virtual);
+	}
+
+	/**
+	 * @return the time (milliseconds) a subclass may sleep after an error. BaseThread itself
+	 * doesn't use it.
+	 * @deprecated not used by BaseThread; removed in 1.1.0 and restored in 1.2.0 for
+	 * compatibility (BJL-53). Subclasses that need it should keep their own setting.
+	 */
+	@Deprecated
+	public int getErrorSleepTime() {
+		return errorSleepTime;
+	}
+
+	/**
+	 * @param errorSleepTime the time (milliseconds) a subclass may sleep after an error
+	 * @deprecated see {@link #getErrorSleepTime()}
+	 */
+	@Deprecated
+	public void setErrorSleepTime(int errorSleepTime) {
+		this.errorSleepTime = errorSleepTime;
+	}
+
+	/**
+	 * @return true if a subclass should stop when it hits an error. BaseThread itself
+	 * doesn't use it.
+	 * @deprecated not used by BaseThread; removed in 1.1.0 and restored in 1.2.0 for
+	 * compatibility (BJL-53). Subclasses that need it should keep their own setting.
+	 */
+	@Deprecated
+	public boolean isStopOnError() {
+		return stopOnError;
+	}
+
+	/**
+	 * @param stopOnError true if a subclass should stop when it hits an error
+	 * @deprecated see {@link #isStopOnError()}
+	 */
+	@Deprecated
+	public void setStopOnError(boolean stopOnError) {
+		this.stopOnError = stopOnError;
 	}
 
 	/**

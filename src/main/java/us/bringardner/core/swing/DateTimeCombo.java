@@ -66,6 +66,16 @@ public class DateTimeCombo extends JPanel {
 	public void setDate(Date date) {
 		spinner.setModel(new SpinnerDateModel(date, null, null, Calendar.MILLISECOND));
 	}
+
+	/**
+	 * @param date the date to show
+	 * @deprecated renamed to {@link #setDate(Date)} in 1.1.0; restored in 1.2.0 for
+	 * compatibility (BJL-53).
+	 */
+	@Deprecated
+	public void setdate(Date date) {
+		setDate(date);
+	}
 	
 	public DateTimeCombo(long date) {
 		this();
