@@ -27,6 +27,7 @@ package us.bringardner.core.util;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.UnknownHostException;
@@ -58,10 +59,22 @@ public class SocketClient extends SecureBaseObject {
 
 	public static final String PROPERTY_IS_SO_LINGER = "IsSoLinger";
 
+	/** How long (in milliseconds) {@link #getSocket(String, int)} waits for the connection to be made. */
+	public static final String PROPERTY_CONNECT_TIMEOUT = "ConnectTimeout";
+
+	/**
+	 * 60 seconds. Before this setting existed there was no limit, so an unreachable host
+	 * blocked for as long as the operating system kept trying (about 75 seconds on macOS,
+	 * several minutes on Linux). 0 means no limit.
+	 */
+	public static final int DEFAULT_CONNECT_TIMEOUT = 60000;
+
 
 	private volatile int lingerTime=-1;
 
 	private volatile int socketTimeout=-1;
+
+	private volatile int connectTimeout=-1;
 
 	//  null means the IsSoLinger property has not been read yet
 	private volatile Boolean isSoLinger;
@@ -108,10 +121,13 @@ public class SocketClient extends SecureBaseObject {
 	
 
 	/**
-	 * Create a socket connected to the host:port and configured with the appropriate timeout values
+	 * Create a socket connected to the host:port and configured with the appropriate timeout values.
+	 * The connection attempt gives up after {@link #getConnectTimeout()} milliseconds
+	 * (with a SocketTimeoutException). If anything fails the socket is closed before the exception is thrown.
+	 *
 	 * @param host
 	 * @param port
-	 * @return
+	 * @return a connected socket
 	 * @throws KeyManagementException
 	 * @throws UnrecoverableKeyException
 	 * @throws UnknownHostException
@@ -122,9 +138,53 @@ public class SocketClient extends SecureBaseObject {
 	 * @throws IOException
 	 */
 	public Socket getSocket(String host,int port) throws KeyManagementException, UnrecoverableKeyException, UnknownHostException, CertificateException, FileNotFoundException, KeyStoreException, NoSuchAlgorithmException, IOException {
-		Socket ret = getSocketFactory().createSocket(host, port);
-		configure(ret);
-		return ret;
+		SocketFactory sf = getSocketFactory();
+		Socket ret = null;
+		try {
+			try {
+				ret = sf.createSocket();
+			} catch (SocketException | UnsupportedOperationException e) {
+				//  Some custom factories can't create unconnected sockets, connect without a timeout.
+				ret = null;
+			}
+			if( ret != null ) {
+				ret.connect(new InetSocketAddress(host, port), getConnectTimeout());
+			} else {
+				ret = sf.createSocket(host, port);
+			}
+			configure(ret);
+			return ret;
+		} catch (IOException | RuntimeException e) {
+			if( ret != null ) {
+				try {
+					ret.close();
+				} catch (IOException e2) {
+				}
+			}
+			throw e;
+		}
+	}
+
+	/**
+	 * @return how long (in milliseconds) to wait for a connection to be made. 0 means no limit.
+	 */
+	public int getConnectTimeout() {
+		if( connectTimeout < 0 ) {
+			synchronized(this) {
+				if( connectTimeout < 0 ) {
+					connectTimeout = getIntProperty(PROPERTY_CONNECT_TIMEOUT, DEFAULT_CONNECT_TIMEOUT);
+				}
+			}
+		}
+
+		return connectTimeout;
+	}
+
+	/**
+	 * @param value how long (in milliseconds) to wait for a connection to be made. 0 means no limit.
+	 */
+	public void setConnectTimeout(int value) {
+		connectTimeout = value;
 	}
 	
 

@@ -122,25 +122,72 @@ public abstract class AbstractCoreServer extends BaseThread  {
 
 	
 	/**
+	 * The socket is created the first time this is called and then reused. If it has been
+	 * closed (by {@link #stop()}, {@link #closeServerSocket()} or the run method) a new
+	 * one is created, so a server can be stopped and started again.
+	 *
 	 * @return ServerSocket used by this Server
-	 * 
+	 *
 	 * @throws IOException
 	 */
 	public ServerSocket getServerSocket() throws IOException {
-		if( serverSocket == null ) {
+		ServerSocket ret = serverSocket;
+		if( ret == null || ret.isClosed() ) {
 			synchronized (this) {
-				if( serverSocket == null ) {
-					ServerSocket svr = getServerSocketFactory().createServerSocket(getPort(),getBacklog(),getBindAddr());
-					svr.setSoTimeout(getAcceptTimeout());
-					if( svr instanceof SSLServerSocket ) {
-						((SSLServerSocket)svr).setNeedClientAuth(isNeedClientAuth());
+				ret = serverSocket;
+				if( ret == null || ret.isClosed() ) {
+					ret = getServerSocketFactory().createServerSocket(getPort(),getBacklog(),getBindAddr());
+					try {
+						ret.setSoTimeout(getAcceptTimeout());
+						if( ret instanceof SSLServerSocket ) {
+							((SSLServerSocket)ret).setNeedClientAuth(isNeedClientAuth());
+						}
+					} catch (IOException | RuntimeException e) {
+						//  Don't leave the port bound
+						try {
+							ret.close();
+						} catch (IOException e2) {
+						}
+						throw e;
 					}
-					serverSocket = svr;
+					serverSocket = ret;
 				}
 			}
 		}
-		
-		return serverSocket;
+
+		return ret;
+	}
+
+	/**
+	 * Close the listening socket, if it is open. A thread blocked in accept() gets a
+	 * SocketException at once. Connections that were already accepted are not affected.
+	 * The next call to {@link #getServerSocket()} creates a new socket.
+	 */
+	public void closeServerSocket() {
+		ServerSocket s;
+		synchronized (this) {
+			s = serverSocket;
+			serverSocket = null;
+		}
+		if( s != null ) {
+			try {
+				s.close();
+			} catch (IOException e) {
+				// already closed
+			}
+		}
+	}
+
+	/**
+	 * Stop the server. As well as setting {@link #stopping}, this closes the listening
+	 * socket so a blocked accept() returns at once (with a SocketException) instead of
+	 * waiting for the accept timeout. The run method should check {@link #stopping} when
+	 * accept() throws and exit quietly.
+	 */
+	@Override
+	public void stop() {
+		super.stop();
+		closeServerSocket();
 	}
 
 	

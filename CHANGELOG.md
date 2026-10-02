@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.2.0 (unreleased)
+
+### Fixed
+
+- An `AbstractCoreServer` could not be started again after it stopped: `getServerSocket()` returned
+  the cached socket even after it had been closed, so `accept()` failed. A closed socket is now replaced.
+- `AbstractCoreServer.stop()` only set `stopping`, so the server kept running until `accept()` timed out
+  (60 seconds by default). It now also closes the listening socket so `accept()` returns at once.
+  Connections that were already accepted are not affected.
+- `SocketClient.getSocket()` had no connect timeout, so an unreachable host blocked for as long as the
+  operating system kept trying (about 75 seconds on macOS, minutes on Linux). It also left the socket
+  open if `configure()` threw. The socket is now closed on any failure.
+
+### Changed (may need a code change)
+
+- Because `stop()` closes the server socket, a run method blocked in `accept()` now gets a
+  `SocketException` when the server is stopped. Check `stopping` before treating it as an error.
+- `SocketClient.getSocket()` gives up after 60 seconds by default (the `ConnectTimeout` property,
+  in milliseconds; 0 means no limit).
+
+### Added
+
+- `AbstractCoreServer.closeServerSocket()`.
+- `SocketClient.getConnectTimeout()`/`setConnectTimeout(int)`, `PROPERTY_CONNECT_TIMEOUT` and
+  `DEFAULT_CONNECT_TIMEOUT`.
+- `BaseThread` can run on virtual threads on Java 21+ (multi-release jar; see `BaseThread.VIRTUAL_THREADS_PROPERTY`).
+- `BaseThread.isAlive()`.
+
+### Restored
+
+- `BaseThread.setStopOnError`/`isStopOnError`, `setErrorSleepTime`/`getErrorSleepTime`,
+  `DEFAULT_ERROR_SLEEP_TIME`, `SecureBaseObject.init()`, `SecureBaseObject.PROPERTY_FORCE_TLS_VERSION`,
+  `BjlLogger.format` and `DateTimeCombo.setdate(Date)` were removed or renamed in 1.1.0 and are back
+  (deprecated) because other BJL projects still use them (BJL-53).
+
 ## 1.1.0
 
 ### Fixed
