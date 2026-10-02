@@ -46,6 +46,16 @@ public abstract class BaseThread extends SecureBaseObject implements Runnable {
 
 	private volatile ClassLoader contextClassLoader;
 
+	/**
+	 * System property for the default of {@link #setVirtual(Boolean)}: "false" (the default,
+	 * so upgrading bjl_core changes nothing), "true", or "auto" (virtual threads on Java 24
+	 * and later), see {@link #isVirtualDefault()}.
+	 */
+	public static final String VIRTUAL_THREADS_PROPERTY = "us.bringardner.core.virtualThreads";
+
+	/** null = the default ({@link #isVirtualDefault()}), else what the caller asked for. */
+	private volatile Boolean virtual;
+
 	private volatile UncaughtExceptionHandler uncaughtExceptionHandler;
 	
 	public BaseThread() {
@@ -194,9 +204,104 @@ public abstract class BaseThread extends SecureBaseObject implements Runnable {
 
 
 	/**
+	 * @return true if this JVM can run a BaseThread on a virtual thread (Java 21 and later).
+	 * On older JVMs {@link #setVirtual(Boolean)} is accepted and ignored.
+	 */
+	public static boolean isVirtualSupported() {
+		return Threads.virtualSupported();
+	}
+
+	/**
+	 * Whether a BaseThread uses a virtual thread when {@link #setVirtual(Boolean)} wasn't
+	 * called (or was called with null), from the {@value #VIRTUAL_THREADS_PROPERTY} system
+	 * property: "false" (also when it isn't set), "true", or "auto" =
+	 * {@link #isVirtualRecommended()}. Even then a thread set to non-daemon stays a
+	 * platform thread unless setVirtual(true) is called (see {@link #isVirtual()}).
+	 * 
+	 * @return the default; always false if virtual threads aren't supported.
+	 */
+	public static boolean isVirtualDefault() {
+		if( !isVirtualSupported() ) {
+			return false;
+		}
+		String value = System.getProperty(VIRTUAL_THREADS_PROPERTY, "false").trim();
+		if( value.equalsIgnoreCase("true") ) {
+			return true;
+		} else if( value.equalsIgnoreCase("auto") ) {
+			return isVirtualRecommended();
+		}
+		return false;
+	}
+
+	/**
+	 * Virtual threads are worth using for blocking I/O on Java 24 and later. On Java 21-23 a
+	 * virtual thread that blocks (for example on socket I/O) inside a synchronized block holds
+	 * on to its carrier thread, which removes most of the benefit; Java 24 fixed that (JEP 491).
+	 * Callers can use this for their own "auto" setting.
+	 * 
+	 * @return true on Java 24 and later
+	 */
+	public static boolean isVirtualRecommended() {
+		return isVirtualSupported() && Runtime.version().feature() >= 24;
+	}
+
+	/**
+	 * Run this thread on a virtual thread (true), a platform thread (false) or decide with
+	 * {@link #isVirtualDefault()} (null, the default). Used the next time the thread is started.
+	 * Ignored where virtual threads aren't supported (before Java 21).
+	 * A virtual thread is always a daemon thread and has normal priority, so
+	 * {@link #setDaemon(boolean)} and {@link #setPriority(int)} don't apply to it.
+	 * 
+	 * @param virtual true, false, or null for the default
+	 */
+	public void setVirtual(Boolean virtual) {
+		this.virtual = virtual;
+	}
+
+	/**
+	 * @return what was set with {@link #setVirtual(Boolean)}: true, false or null (the default)
+	 */
+	public Boolean getVirtual() {
+		return virtual;
+	}
+
+	/**
+	 * A virtual thread is always a daemon thread, so with the default (null) a thread set to
+	 * non-daemon (to keep the JVM running) stays a platform thread; setVirtual(true) overrides that.
+	 * 
+	 * @return true if the next start will use a virtual thread
+	 */
+	public boolean isVirtual() {
+		if( !isVirtualSupported() ) {
+			return false;
+		}
+		Boolean v = virtual;
+		return v == null ? isVirtualDefault() && isDaemon() : v.booleanValue();
+	}
+
+	/**
+	 * @return true if the thread this object started (or is running on) is a virtual thread
+	 */
+	public boolean isVirtualThread() {
+		return Threads.isVirtual(thread);
+	}
+
+	/**
+	 * Creates the (unstarted) thread that runs this object; called by {@link #start()}.
+	 * Subclasses can override it to supply their own thread.
+	 * 
+	 * @param virtual {@link #isVirtual()}
+	 * @return a new thread that runs this object
+	 */
+	protected Thread createThread(boolean virtual) {
+		return Threads.create(this, virtual);
+	}
+
+	/**
 	 * Start the thread processing by creating and initializing 
 	 * a Thread and calling its start method. This has no impact on 
 	 * the running field which should be set to true during the run method.
+	 * The thread is a virtual thread if {@link #isVirtual()} is true.
 	 *   
 	 */
 	public synchronized void start() {
@@ -205,7 +310,7 @@ public abstract class BaseThread extends SecureBaseObject implements Runnable {
 		if( !running && (current == null || !current.isAlive()) ) {
 			stopping = false;
 			started = false;
-			thread = new Thread(this);
+			thread = createThread(isVirtual());
 			String name = getName();
 			if( name != null ) {
 				thread.setName(name);
@@ -213,12 +318,16 @@ public abstract class BaseThread extends SecureBaseObject implements Runnable {
 				setName(thread.getName());
 			}
 			
-			thread.setDaemon(isDaemon());
-			int priority = getPriority();
-			
-			if( priority != -1 ) {
-				thread.setPriority(priority);
-			} 
+			// A virtual thread is always a daemon (setDaemon(false) would throw) and its
+			// priority can't be changed (BJL-6)
+			if( !Threads.isVirtual(thread) ) {
+				thread.setDaemon(isDaemon());
+				int priority = getPriority();
+
+				if( priority != -1 ) {
+					thread.setPriority(priority);
+				}
+			}
 			
 			ClassLoader loader = getContextClassLoader();
 			if( loader != null ) {

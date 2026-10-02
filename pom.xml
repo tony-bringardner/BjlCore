@@ -5,7 +5,7 @@
 	<artifactId>bjl_core</artifactId>
 	<name>Bringardner Java Library Core</name>
 	<groupId>us.bringardner</groupId>
-	<version>1.1.0</version>
+	<version>1.2.0-SNAPSHOT</version>
 
 	<description>This project holds the Core (or Common) components that are
 		used by
@@ -38,6 +38,48 @@
 		</testResources>
 
 		<plugins>
+			<!--
+			  Multi-release jar (BJL-6): everything is compiled for Java 11 as before; the few
+			  classes in src/main/java21 are compiled for Java 21 into META-INF/versions/21, where
+			  only Java 21+ JVMs look. The library still runs on Java 11; building it needs JDK 21+.
+			-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>java21</id>
+						<goals>
+							<goal>compile</goal>
+						</goals>
+						<configuration>
+							<release>21</release>
+							<compileSourceRoots>
+								<compileSourceRoot>${project.basedir}/src/main/java21</compileSourceRoot>
+							</compileSourceRoots>
+							<multiReleaseOutput>true</multiReleaseOutput>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+			<!--
+			  The JVM only picks META-INF/versions/21 from inside a jar; surefire tests
+			  target/classes (the Java 11 classes). Tests named *IT run in 'mvn verify' against
+			  the built jar, so on JDK 21+ they test the Java 21 classes.
+			-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-failsafe-plugin</artifactId>
+				<version>3.5.2</version>
+				<executions>
+					<execution>
+						<goals>
+							<goal>integration-test</goal>
+							<goal>verify</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
 			<!-- Plugins listed only in pluginManagement are NOT executed, so the source jar is declared here. -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
@@ -52,6 +94,8 @@
 					<archive>
 						<manifestEntries>
 							<Automatic-Module-Name>us.bringardner.core</Automatic-Module-Name>
+							<!-- Java 21+ JVMs use the classes in META-INF/versions/21 (BJL-6) -->
+							<Multi-Release>true</Multi-Release>
 						</manifestEntries>
 					</archive>
 				</configuration>
@@ -125,6 +169,13 @@
 							<goals>
 								<goal>report</goal>
 							</goals>
+							<configuration>
+								<!-- The Java 21 copies of multi-release classes (BJL-6) have the same
+								     names as the Java 11 ones, which the report can't hold twice -->
+								<excludes>
+									<exclude>META-INF/versions/**</exclude>
+								</excludes>
+							</configuration>
 						</execution>
 					</executions>
 				</plugin>
