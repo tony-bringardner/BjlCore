@@ -21,8 +21,20 @@
   `LogLevel` and `LogFile` properties. `BjlLogger` is now the default unless a log4j2 implementation is
   found, and log4j2 isn't started just to find out. Naming `Log4JLogger` in the `ILogger` property still
   uses it.
+- `DayPanel` was wrong where the week starts on Monday (most of Europe): the month started on the 2nd,
+  so the 1st was missing and clicking a day selected the next one. It now follows the locale's first
+  day of the week, and the day names in the header come from the locale (`S M T W T F S` in the US,
+  as before).
+- `Clock` drew into a 1x image and copied it to the screen, so it was blurry on high resolution
+  (Retina) displays, leaked a `Graphics2D` on every repaint, and threw a `NullPointerException` when
+  painted before it was displayable or with no size. It now draws directly in `paintComponent`.
+  Pressing the mouse on a clock before its first paint also threw a `NullPointerException`.
 
 ### Changed (may need a code change)
+
+- `Clock` no longer overrides `paint(Graphics)` and `update(Graphics)`; it draws in `paintComponent`.
+  A subclass that overrides `paint` and calls `super.paint` still gets the clock drawn.
+  `createGraphics2D(int, int)` is deprecated and unused; it now returns a `Graphics2D` for a new image.
 
 - Because `stop()` closes the server socket, a run method blocked in `accept()` now gets a
   `SocketException` when the server is stopped. Check `stopping` before treating it as an error.

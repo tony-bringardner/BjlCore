@@ -34,10 +34,13 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.time.DayOfWeek;
+import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 import javax.swing.JComponent;
 import javax.swing.JFrame;
@@ -82,53 +85,41 @@ public class DayPanel extends JPanel implements ComponentId {
 		glayout.setVgap(0);
 		setLayout(glayout);
 		
+		//  The calendar (and so the first day of the week) is for the default locale,
+		//  Sunday in the US, Monday in most of Europe.
 		Calendar cal = Calendar.getInstance();
-		Calendar lastMo = Calendar.getInstance();
-		Calendar nextMo = Calendar.getInstance();
 		cal.setTime(date);
-		lastMo.setTime(date);
-		nextMo.setTime(date);
-		lastMo.add(Calendar.MONTH,-1);
-		nextMo.add(Calendar.MONTH,1);
 
 		mo = cal.get(Calendar.MONTH);
 		day = cal.get(Calendar.DAY_OF_MONTH);
-		
-		
-		
+
+		Calendar lastMo = (Calendar) cal.clone();
+		lastMo.set(Calendar.DAY_OF_MONTH, 1);
+		lastMo.add(Calendar.MONTH,-1);
+
 		int first = cal.getFirstDayOfWeek();
-		cal.set(Calendar.DAY_OF_MONTH, first);
+		cal.set(Calendar.DAY_OF_MONTH, 1);
 		int dow = cal.get(Calendar.DAY_OF_WEEK);
-		//cal.getFirstDayOfWeek()
-		
-		add("tab",config(new JLabel("  S")));
-		add(config(new JLabel("  M")));
-		add(config(new JLabel("  T")));
-		add(config(new JLabel("  W")));
-		add(config(new JLabel("  T")));
-		add(config(new JLabel("  F")));
-		add(config(new JLabel("  S")));
-		
-		int col=first;
-		String tmp = null;
-		
-		int lastDaMO = lastMo.getActualMaximum(Calendar.DAY_OF_MONTH);		
-		lastDaMO -= (dow-2);
-		
-		while(col < dow) {
-			if( col == 1 ) {
-				add("br tab",config(new JLabel(""+lastDaMO)));
-			} else {
-				add(config(new JLabel(""+lastDaMO)));
-			}
-			col++;
-			lastDaMO++;
+
+		//  One column per day of the week, starting with the first day of the week
+		Locale locale = Locale.getDefault(Locale.Category.FORMAT);
+		for(int i=0; i < 7; i++ ) {
+			add(config(new JLabel("  "+dayName((first-1+i)%7+1, locale))));
 		}
-		
+
+		String tmp = null;
+
+		//  The end of last month fills the columns before the first day of this month
+		int lead = (dow-first+7)%7;
+		int lastDaMO = lastMo.getActualMaximum(Calendar.DAY_OF_MONTH)-lead+1;
+		for(int i=0; i < lead; i++ ) {
+			add(config(new JLabel(""+(lastDaMO+i))));
+		}
+
 		JTextField cur=null;
-		
+		int cells = lead;
+
 		while(cal.get(Calendar.MONTH)==mo) {
-			dow = cal.get(Calendar.DAY_OF_WEEK);			
 			final int day1 = cal.get(Calendar.DAY_OF_MONTH);
 			
 			if( day1 < 10 ) {
@@ -144,11 +135,8 @@ public class DayPanel extends JPanel implements ComponentId {
 			textField.setFocusable(false);
 			textField.setCursor(cusor);
 			
-			if(col++ == 1 || dow == 1) {
-				add("br tab",textField);
-			} else {
-				add(textField);
-			}
+			add(textField);
+			cells++;
 			if( day1 == day) {
 				textField.setBackground(Color.blue);
 				textField.setForeground(Color.white);
@@ -184,15 +172,26 @@ public class DayPanel extends JPanel implements ComponentId {
 		}
 		
 		
-		int day1 = 1;
-		
-		while(dow < 7) {
+		//  The start of next month fills the rest of the last week
+		int trail = (7-cells%7)%7;
+		for(int day1=1; day1 <= trail; day1++ ) {
 			add(config(new JLabel("0"+day1)));
-			dow++;
-			day1++;
 		}
-		cur.requestFocus();
-		
+		if( cur != null ) {
+			cur.requestFocus();
+		}
+
+	}
+
+	/**
+	 * @param calendarDay a Calendar day of the week (Calendar.SUNDAY=1 ... Calendar.SATURDAY=7)
+	 * @param locale
+	 * @return the one letter name of the day ("S", "M", "T" ... in English)
+	 */
+	private static String dayName(int calendarDay, Locale locale) {
+		//  DayOfWeek starts on Monday (1) and ends on Sunday (7)
+		DayOfWeek dow = DayOfWeek.of((calendarDay+5)%7+1);
+		return dow.getDisplayName(TextStyle.NARROW, locale);
 	}
 	
 	 private Component config(JComponent comp) {

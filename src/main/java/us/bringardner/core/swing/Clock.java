@@ -52,7 +52,7 @@ import javax.swing.JPanel;
 public class Clock extends JPanel implements MouseListener, MouseMotionListener ,ComponentId {
 	
 	private static final long serialVersionUID = 1L;
-	private static final double PI = 3.14159f;
+	private static final double PI = Math.PI;
 	private static final double RAD2DEG = 57.2957795;
 
 	private static final Color COLOR_20_20_20 = new Color(20, 20, 20);
@@ -66,7 +66,6 @@ public class Clock extends JPanel implements MouseListener, MouseMotionListener 
 	private static final double CALC_2_PIE_60 = 2 * PI / 60;
 	private static final double CALC_2_PIE_12 = 2 * PI / 12;
 
-	private BufferedImage bimg;
 	private boolean showText=true;
 	private boolean savedShowText=true;;
 	private boolean showPt=false;
@@ -198,31 +197,50 @@ public class Clock extends JPanel implements MouseListener, MouseMotionListener 
 
 
 
+	/**
+	 * The clock used to draw itself into an image made by this method and then copy the image to the
+	 * screen. It now draws straight to the screen (see {@link #paintComponent(Graphics)}), which is
+	 * sharp on high resolution (Retina) displays, so nothing uses this any more.
+	 *
+	 * @param w
+	 * @param h
+	 * @return a new Graphics2D, cleared to the background color, for an image of w x h (at least 1 x 1).
+	 *  The caller must dispose of it.
+	 * @deprecated the clock no longer draws into an image
+	 */
+	@Deprecated
 	public Graphics2D createGraphics2D(int w, int h) {
-	        Graphics2D g2 = null;
-	        if (bimg == null || bimg.getWidth() != w || bimg.getHeight() != h) {
-	        	Object obj =  createImage(w, h);
-	            bimg = (BufferedImage)obj;
-	            //reset(w, h);
-	        } 
-	        g2 = bimg.createGraphics();
-	        g2.setBackground(getBackground());
-	        g2.clearRect(0, 0, w, h);
-	        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
-	        		RenderingHints.VALUE_ANTIALIAS_ON);
-	        return g2;
-	    }
-	 
-	 public void update(Graphics g) {
-	        paint(g); 
-	 }
+		//  createImage() returns null until the clock is displayable, a BufferedImage always works
+		BufferedImage img = new BufferedImage(Math.max(w, 1), Math.max(h, 1), BufferedImage.TYPE_INT_ARGB);
+		Graphics2D g2 = img.createGraphics();
+		g2.setBackground(getBackground());
+		g2.clearRect(0, 0, w, h);
+		g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+				RenderingHints.VALUE_ANTIALIAS_ON);
+		return g2;
+	}
 
+	/**
+	 * Draws the clock directly with (a copy of) the Graphics Swing passes in. Before this, paint() was
+	 * overridden to draw into a full size image at 1x and copy it, which was slower, blurry on high
+	 * resolution displays, leaked a Graphics2D on every repaint, and threw a NullPointerException
+	 * when the clock was not displayable or had no size.
+	 */
+	@Override
+	protected void paintComponent(Graphics rg) {
+		//  Fills the background (the clock is opaque, like any JPanel)
+		super.paintComponent(rg);
+		Graphics2D g = (Graphics2D) rg.create();
+		try {
+			g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+			drawAll(g, getWidth(), getHeight());
+		} finally {
+			g.dispose();
+		}
+	}
 
-	public void paint(Graphics rg) {
-		int width = getWidth();
-		int height = getHeight();
+	private void drawAll(Graphics2D g, int width, int height) {
 
-		
 		//  Radius is 80% of max(w,h);
 		radius = (int)((Math.min(width,height) * 0.8)/2);
 	    lenH = 5 * radius / 10;
@@ -230,10 +248,8 @@ public class Clock extends JPanel implements MouseListener, MouseMotionListener 
 	    cx = width / 2;
 	    cy = height / 2;
 	    int ptSz = (int)(lenM * 0.3);
-	    
+
 		 int ptSzC = ptSz/2;
-		 
-	    Graphics2D g = createGraphics2D(width, height);
 
 		//  Draw clock
 		drawClock(g,width,height,radius);
@@ -290,9 +306,6 @@ public class Clock extends JPanel implements MouseListener, MouseMotionListener 
 
 		drawTriangle(g,lenH,hour,CALC_2_PIE_12,0.3);
 		drawTest(g);
-		//g.dispose();
-        rg.drawImage(bimg, 0, 0, this);
-
 	}
 	
 	
@@ -466,9 +479,10 @@ public class Clock extends JPanel implements MouseListener, MouseMotionListener 
 		startHr = hour;
 		startMin = minute;
 		showText=true;
-		if(miPoint.contains(event.getPoint()))  {
+		//  The hand positions are set when the clock is painted, they are null until then
+		if(miPoint != null && miPoint.contains(event.getPoint()))  {
 			type = TYPE_MI;
-		} else if(hrPoint.contains(event.getPoint()))  {
+		} else if(hrPoint != null && hrPoint.contains(event.getPoint()))  {
 			type=TYPE_HR;
 		}  else {
 			type = 0;
