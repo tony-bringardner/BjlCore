@@ -9,6 +9,7 @@ import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.net.ServerSocketFactory;
 import javax.net.ssl.SSLServerSocket;
@@ -73,6 +74,18 @@ public abstract class AbstractCoreServer extends BaseThread  {
 
 	public static final String PROPERTY_BIND_ADDRESS = "BindAddress";
 
+	/** "true" turns on SO_KEEPALIVE for accepted sockets, so a peer that disappears is detected. Default false. */
+	public static final String PROPERTY_KEEP_ALIVE = "KeepAlive";
+
+	/** "true" turns on TCP_NODELAY (no Nagle delay) for accepted sockets. Default false. */
+	public static final String PROPERTY_TCP_NO_DELAY = "TcpNoDelay";
+
+	/** The most connections {@link #tryAcquireConnection()} allows at once, see {@link #DEFAULT_MAX_CONNECTIONS}. */
+	public static final String PROPERTY_MAX_CONNECTIONS = "MaxConnections";
+
+	/** 0: no limit. */
+	public static final int DEFAULT_MAX_CONNECTIONS = 0;
+
 	private volatile ServerSocketFactory factory;
 	
 	
@@ -97,6 +110,13 @@ public abstract class AbstractCoreServer extends BaseThread  {
 
 	//  null means the IsSoLinger property has not been read yet
 	private volatile Boolean isSoLinger;
+
+	//  null means the property has not been read yet
+	private volatile Boolean keepAlive;
+	private volatile Boolean tcpNoDelay;
+
+	private volatile int maxConnections = -1;
+	private final AtomicInteger activeConnections = new AtomicInteger();
 
 	private volatile ServerSocket serverSocket;
 	
@@ -431,7 +451,7 @@ public abstract class AbstractCoreServer extends BaseThread  {
 
 	/**
 	 * Configure a newly accepted Socket.
-	 * By default SoTimeout and SoLinger are set based on current configuration.  
+	 * By default SoTimeout, SoLinger, KeepAlive and TcpNoDelay are set based on current configuration.  
 	 *  
 	 * @param socket
 	 * @throws SocketException
@@ -442,6 +462,117 @@ public abstract class AbstractCoreServer extends BaseThread  {
 		if( isSoLinger() ) {
 			socket.setSoLinger(true, getLingerTime());
 		}		
+		if( isKeepAlive() ) {
+			socket.setKeepAlive(true);
+		}
+		if( isTcpNoDelay() ) {
+			socket.setTcpNoDelay(true);
+		}
+	}
+
+	/**
+	 * @return true if SO_KEEPALIVE should be enabled for newly accepted Sockets (default false).
+	 */
+	public boolean isKeepAlive() {
+		Boolean ret = keepAlive;
+		if( ret == null ) {
+			ret = getBooleanProperty(PROPERTY_KEEP_ALIVE, false);
+			keepAlive = ret;
+		}
+		return ret;
+	}
+
+	/**
+	 * @param keepAlive true to enable SO_KEEPALIVE for newly accepted Sockets.
+	 */
+	public void setKeepAlive(boolean keepAlive) {
+		this.keepAlive = keepAlive;
+	}
+
+	/**
+	 * @return true if TCP_NODELAY should be enabled for newly accepted Sockets (default false).
+	 * Turning it on avoids a delay (often about 40ms) on small writes in request/response protocols.
+	 */
+	public boolean isTcpNoDelay() {
+		Boolean ret = tcpNoDelay;
+		if( ret == null ) {
+			ret = getBooleanProperty(PROPERTY_TCP_NO_DELAY, false);
+			tcpNoDelay = ret;
+		}
+		return ret;
+	}
+
+	/**
+	 * @param tcpNoDelay true to enable TCP_NODELAY for newly accepted Sockets.
+	 */
+	public void setTcpNoDelay(boolean tcpNoDelay) {
+		this.tcpNoDelay = tcpNoDelay;
+	}
+
+	/**
+	 * @return the most connections {@link #tryAcquireConnection()} allows at once, 0 (or less) for no limit.
+	 */
+	public int getMaxConnections() {
+		if( maxConnections < 0 ) {
+			synchronized(this) {
+				if( maxConnections < 0 ) {
+					maxConnections = getIntProperty(PROPERTY_MAX_CONNECTIONS, DEFAULT_MAX_CONNECTIONS);
+				}
+			}
+		}
+		return maxConnections;
+	}
+
+	/**
+	 * @param value the most connections {@link #tryAcquireConnection()} allows at once, 0 for no limit.
+	 * Lowering it doesn't close connections already open; new ones are refused until enough have closed.
+	 */
+	public void setMaxConnections(int value) {
+		//  -1 means "read the property", so any negative value is stored as 0 (no limit)
+		maxConnections = Math.max(value, 0);
+	}
+
+	/**
+	 * Reserve a place for a new connection. The server doesn't call this itself; an accept loop that
+	 * wants to limit how many connections (and handler threads) it has at once uses it like this:
+	 * <pre>
+	 *  Socket socket = getServerSocket().accept();
+	 *  if( !tryAcquireConnection() ) {
+	 *      socket.close();   // too many connections
+	 *      continue;
+	 *  }
+	 *  // start the handler, which calls releaseConnection() in a finally block when it is done
+	 * </pre>
+	 *
+	 * @return true if the connection may go ahead (it must then be released with
+	 *  {@link #releaseConnection()}), false if {@link #getMaxConnections()} are already open.
+	 */
+	public boolean tryAcquireConnection() {
+		int max = getMaxConnections();
+		while( true ) {
+			int current = activeConnections.get();
+			if( max > 0 && current >= max ) {
+				return false;
+			}
+			if( activeConnections.compareAndSet(current, current+1) ) {
+				return true;
+			}
+		}
+	}
+
+	/**
+	 * Give back a place reserved by {@link #tryAcquireConnection()}. Call it exactly once per
+	 * successful tryAcquireConnection(); extra calls are ignored (the count never goes below 0).
+	 */
+	public void releaseConnection() {
+		activeConnections.updateAndGet(n -> n > 0 ? n-1 : 0);
+	}
+
+	/**
+	 * @return how many connections are reserved by {@link #tryAcquireConnection()} and not yet released.
+	 */
+	public int getActiveConnections() {
+		return activeConnections.get();
 	}
 
 	/**

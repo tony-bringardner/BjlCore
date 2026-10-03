@@ -73,6 +73,12 @@ public class SocketClient extends SecureBaseObject {
 	 */
 	public static final int DEFAULT_CONNECT_TIMEOUT = 60000;
 
+	/** "true" turns on SO_KEEPALIVE, so a server that disappears is detected. Default false. */
+	public static final String PROPERTY_KEEP_ALIVE = "KeepAlive";
+
+	/** "true" turns on TCP_NODELAY (no Nagle delay). Default false. */
+	public static final String PROPERTY_TCP_NO_DELAY = "TcpNoDelay";
+
 	/** "false" turns off the host name check for secure connections, see {@link #isVerifyHostname()}. */
 	public static final String PROPERTY_VERIFY_HOSTNAME = "VerifyHostname";
 
@@ -88,6 +94,10 @@ public class SocketClient extends SecureBaseObject {
 
 	//  null means the IsSoLinger property has not been read yet
 	private volatile Boolean isSoLinger;
+
+	//  null means the property has not been read yet
+	private volatile Boolean keepAlive;
+	private volatile Boolean tcpNoDelay;
 
 
 	private volatile SocketFactory factory;
@@ -336,7 +346,7 @@ public class SocketClient extends SecureBaseObject {
 
 	/**
 	 * Configure a newly accepted Socket.
-	 * By default SoTimeout and SoLinger are set based on current configuration.  
+	 * By default SoTimeout, SoLinger, KeepAlive and TcpNoDelay are set based on current configuration.  
 	 *  
 	 * @param socket
 	 * @throws SocketException
@@ -347,6 +357,51 @@ public class SocketClient extends SecureBaseObject {
 		if( isSoLinger() ) {
 			socket.setSoLinger(true, getLingerTime());
 		}		
+		if( isKeepAlive() ) {
+			socket.setKeepAlive(true);
+		}
+		if( isTcpNoDelay() ) {
+			socket.setTcpNoDelay(true);
+		}
+	}
+
+	/**
+	 * @return true if SO_KEEPALIVE should be enabled for new Sockets (default false).
+	 */
+	public boolean isKeepAlive() {
+		Boolean ret = keepAlive;
+		if( ret == null ) {
+			ret = getBooleanProperty(PROPERTY_KEEP_ALIVE, false);
+			keepAlive = ret;
+		}
+		return ret;
+	}
+
+	/**
+	 * @param keepAlive true to enable SO_KEEPALIVE for new Sockets.
+	 */
+	public void setKeepAlive(boolean keepAlive) {
+		this.keepAlive = keepAlive;
+	}
+
+	/**
+	 * @return true if TCP_NODELAY should be enabled for new Sockets (default false).
+	 * Turning it on avoids a delay (often about 40ms) on small writes in request/response protocols.
+	 */
+	public boolean isTcpNoDelay() {
+		Boolean ret = tcpNoDelay;
+		if( ret == null ) {
+			ret = getBooleanProperty(PROPERTY_TCP_NO_DELAY, false);
+			tcpNoDelay = ret;
+		}
+		return ret;
+	}
+
+	/**
+	 * @param tcpNoDelay true to enable TCP_NODELAY for new Sockets.
+	 */
+	public void setTcpNoDelay(boolean tcpNoDelay) {
+		this.tcpNoDelay = tcpNoDelay;
 	}
 
 	/**
