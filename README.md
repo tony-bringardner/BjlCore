@@ -127,6 +127,11 @@ It is configured with properties (see [Properties](#properties); the class name 
 | `<logger name>.LogLevel` | The level for one logger, e.g. `-Dcom.example.Mailer.LogLevel=DEBUG` |
 | `LogLevel` | The level for all loggers. The default is `ERROR`. |
 | `LogFile` | A file to append to, or `System.out` (the default) or `System.err`. Loggers that name the same file share it. |
+| `LogFileMaxSize` | Start a new log file when it would grow past this size: bytes, or with a `K`, `M` or `G` suffix (`10M`). The old file is renamed `LogFile.1` (the previous `.1` becomes `.2` and so on). The default is no limit. |
+| `LogFileCount` | How many old log files to keep, 5 by default. With 0 the log file is started again from empty. |
+
+The first logger to open a file decides its size limit. If writing to the log file fails (a full
+disk, say), that is reported once on `System.err`, and again when writing works again.
 
 Level names from other frameworks also work: `OFF`, `FATAL`, `SEVERE`, `WARNING`, `TRACE`,
 `ALL`, `FINE`, `FINER` and `FINEST`. An invalid level is reported and the default is used.

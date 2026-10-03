@@ -1,10 +1,16 @@
 // ~version~V000.01.02-V000.00.01-V000.00.00-
 package us.bringardner.core;
 
+import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.io.PrintStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
@@ -41,6 +47,17 @@ public class BjlLogger extends BaseObject implements ILogger {
 
 	public static final String PROPERTY_LOG_LEVEL = "LogLevel";
 	public static final String PROPERTY_LOG_FILE = "LogFile";
+	/**
+	 * When the log file would grow past this size it is renamed (to LogFile.1, the old LogFile.1 to LogFile.2 ...)
+	 * and a new one is started. Bytes, or with a K, M or G suffix ("10M"). The default (0) is no limit.
+	 */
+	public static final String PROPERTY_LOG_FILE_MAX_SIZE = "LogFileMaxSize";
+	/**
+	 * How many old log files are kept when {@link #PROPERTY_LOG_FILE_MAX_SIZE} is set, the default is
+	 * {@link #DEFAULT_LOG_FILE_COUNT}. With 0 the log file is started again from empty.
+	 */
+	public static final String PROPERTY_LOG_FILE_COUNT = "LogFileCount";
+	public static final int DEFAULT_LOG_FILE_COUNT = 5;
 	/**
 	 * The default level is ERROR so that errors are never silently discarded.
 	 * Set the LogLevel property (NONE, ERROR, WARN, INFO, DEBUG) to change it.
@@ -163,7 +180,9 @@ public class BjlLogger extends BaseObject implements ILogger {
 				_out = System.err;
 				_err = System.err;
 			}  else {
-				PrintStream ps = openLogFile(tmp);
+				long maxSize = parseSize(getProperty(PROPERTY_LOG_FILE_MAX_SIZE));
+				int count = getIntProperty(PROPERTY_LOG_FILE_COUNT, DEFAULT_LOG_FILE_COUNT);
+				PrintStream ps = openLogFile(tmp, maxSize, count);
 				if( ps != null ) {
 					_out = ps;
 					_err = ps;
@@ -204,7 +223,11 @@ public class BjlLogger extends BaseObject implements ILogger {
 		}
 	}
 
-	private static PrintStream openLogFile(String fileName) {
+	/**
+	 * Open (or find) the stream for a log file. The first logger to open a file decides its maximum
+	 * size and how many old files are kept; loggers that name the same file share the stream.
+	 */
+	private static PrintStream openLogFile(String fileName, long maxSize, int count) {
 		File file = new File(fileName).getAbsoluteFile();
 		String key = file.getPath();
 		try {
@@ -222,7 +245,9 @@ public class BjlLogger extends BaseObject implements ILogger {
 						if( dir != null && !dir.exists() ) {
 							dir.mkdirs();
 						}
-						ret = new PrintStream(new FileOutputStream(file, true), true);
+						//  Buffered, and flushed at the end of every log entry (autoflush), so an entry is
+						//  written with one write instead of one per line of a stack trace.
+						ret = new PrintStream(new BufferedOutputStream(new LogFileStream(file, maxSize, count), 8192), true);
 						logFiles.put(key, ret);
 					} catch (IOException e) {
 						System.err.println("Error opening log file "+file+ " e="+e+". Logging to System.out");
@@ -234,20 +259,153 @@ public class BjlLogger extends BaseObject implements ILogger {
 		return ret;
 	}
 
+	/**
+	 * @param value a size in bytes, or with a K, M or G suffix (an optional B after it is allowed: "10MB")
+	 * @return the size in bytes, 0 for null, empty or invalid values
+	 */
+	static long parseSize(String value) {
+		if( value == null || value.trim().isEmpty() ) {
+			return 0;
+		}
+		String tmp = value.trim().toUpperCase(Locale.ROOT);
+		if( tmp.length() > 1 && tmp.endsWith("B") ) {
+			tmp = tmp.substring(0, tmp.length()-1).trim();
+		}
+		long unit = 1;
+		if( tmp.endsWith("K") ) {
+			unit = 1024;
+		} else if( tmp.endsWith("M") ) {
+			unit = 1024*1024;
+		} else if( tmp.endsWith("G") ) {
+			unit = 1024L*1024*1024;
+		}
+		if( unit > 1 ) {
+			tmp = tmp.substring(0, tmp.length()-1).trim();
+		}
+		try {
+			long ret = Long.parseLong(tmp)*unit;
+			if( ret >= 0 ) {
+				return ret;
+			}
+		} catch (NumberFormatException e) {
+		}
+		System.err.println("Invalid "+PROPERTY_LOG_FILE_MAX_SIZE+" ("+value+"). The log file will not be rotated.");
+		return 0;
+	}
+
+	/**
+	 * Appends to a log file, starts a new one when it would grow past the maximum size, and reports
+	 * write errors (a full disk, say) on System.err. PrintStream hides them, so before this, log
+	 * entries could be lost without any sign.
+	 */
+	static final class LogFileStream extends OutputStream {
+		private final File file;
+		private final long maxSize;
+		private final int count;
+		private FileOutputStream out;
+		private long size;
+		//  true from the first failed write until a write works again, so each failure is reported once
+		private boolean failing;
+
+		LogFileStream(File file, long maxSize, int count) throws IOException {
+			this.file = file;
+			this.maxSize = maxSize;
+			this.count = Math.max(count, 0);
+			open();
+		}
+
+		private void open() throws IOException {
+			out = new FileOutputStream(file, true);
+			size = file.length();
+		}
+
+		@Override
+		public synchronized void write(int b) throws IOException {
+			write(new byte[] {(byte) b}, 0, 1);
+		}
+
+		@Override
+		public synchronized void write(byte[] b, int off, int len) throws IOException {
+			try {
+				if( maxSize > 0 && size > 0 && size+len > maxSize ) {
+					rotate();
+				}
+				out.write(b, off, len);
+				size += len;
+				if( failing ) {
+					failing = false;
+					System.err.println("BjlLogger: writing to "+file+" works again.");
+				}
+			} catch (IOException e) {
+				if( !failing ) {
+					failing = true;
+					System.err.println("BjlLogger: can't write to "+file+" ("+e+"). Log entries are being lost.");
+				}
+				throw e;
+			}
+		}
+
+		/** file.1 is the newest old file, file.&lt;count&gt; the oldest */
+		private File old(int i) {
+			return new File(file.getPath()+"."+i);
+		}
+
+		private void rotate() throws IOException {
+			try {
+				out.close();
+			} catch (IOException e) {
+			}
+			try {
+				if( count > 0 ) {
+					for(int i=count-1; i > 0; i-- ) {
+						File from = old(i);
+						if( from.exists() ) {
+							Files.move(from.toPath(), old(i+1).toPath(), StandardCopyOption.REPLACE_EXISTING);
+						}
+					}
+					Files.move(file.toPath(), old(1).toPath(), StandardCopyOption.REPLACE_EXISTING);
+				} else {
+					Files.delete(file.toPath());
+				}
+			} catch (IOException e) {
+				System.err.println("BjlLogger: can't start a new log file, still appending to "+file+" ("+e+")");
+				open();
+				//  Don't try again until the file has grown by another maxSize
+				size = 0;
+				return;
+			}
+			open();
+		}
+
+		@Override
+		public synchronized void flush() throws IOException {
+			out.flush();
+		}
+
+		@Override
+		public synchronized void close() throws IOException {
+			out.close();
+		}
+	}
+
 	protected void logMessage(Level level,String msg,PrintStream out) {
 		out.println(formatMessage(level, msg));
 	}
-	
+
 	private void logMessage(Level level,String msg,Throwable error, PrintStream out) {
 		String line = formatMessage(level, msg);
 		if( error == null ) {
 			out.println(line);
 		} else {
-			// Keep the message and stack trace together when several threads are logging.
-			synchronized (out) {
-				out.println(line);
-				error.printStackTrace(out);
-			}
+			//  One print, so the message and stack trace stay together when several threads are logging
+			//  and a log file gets them in one write (printStackTrace writes and flushes every line).
+			StringWriter text = new StringWriter();
+			PrintWriter pw = new PrintWriter(text);
+			pw.println(line);
+			error.printStackTrace(pw);
+			pw.flush();
+			out.print(text.toString());
+			out.flush();
 		}
 	}
 

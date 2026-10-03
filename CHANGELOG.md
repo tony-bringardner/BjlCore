@@ -37,6 +37,15 @@
 
 - `Log4JLogger` calls log4j through cached `MethodHandle`s instead of `Method.invoke`. A disabled
   `debug()` call (the most common kind) takes about half the time on Java 21 and two thirds on Java 11.
+- `BjlLogger` writes a message and its stack trace to a log file in one write, instead of one write
+  per line of the trace: logging an error with a stack trace takes about half the time.
+
+### BjlLogger log files
+
+- New `LogFileMaxSize` and `LogFileCount` properties start a new log file when it reaches a size and
+  keep a number of old ones (`app.log.1`, `app.log.2` ...). Off by default, so log files grow as before.
+- A failure writing the log file (a full disk, say) was silently ignored and log entries were lost
+  without any sign. It is now reported once on `System.err`, and again when writing works again.
 
 ### Changed (may need a code change)
 
