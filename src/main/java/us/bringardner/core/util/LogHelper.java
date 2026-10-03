@@ -59,6 +59,9 @@ public class LogHelper extends BaseObject {
 	/**
 	 * Logging and properties for a name. Properties are looked up with the name as the prefix
 	 * (for example name.Port) and without it (Port).
+	 * <p>
+	 * The logger for the name is kept for as long as the application runs, so don't build the name
+	 * from changing data (see {@link BaseObject#findLogger(String)}).
 	 * 
 	 * @param name the logger name and property prefix.
 	 */

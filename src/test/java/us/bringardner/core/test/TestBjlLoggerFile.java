@@ -186,4 +186,99 @@ public class TestBjlLoggerFile {
 		assertTrue(first >= 0, "The failure is reported: "+text);
 		assertEquals(-1, text.indexOf("can't write to /dev/full", first+1), "Only once: "+text);
 	}
+
+	/** Longer than how often BjlLogger checks that its file hasn't been moved (1 second) */
+	private static void waitForFileCheck() throws InterruptedException {
+		Thread.sleep(1200);
+	}
+
+	private static List<String> messages(File file) throws IOException {
+		List<String> ret = new ArrayList<>();
+		for(String line : lines(file)) {
+			ret.add(line.substring(line.lastIndexOf(" - ")+3));
+		}
+		return ret;
+	}
+
+	@Test
+	public void testMovedFileIsReplaced() throws Exception {
+		File dir = Files.createTempDirectory("bjl-moved").toFile();
+		File log = new File(dir, "app.log");
+		BjlLogger logger = logger("test.moved", props(BjlLogger.PROPERTY_LOG_FILE, log.getPath()));
+		logger.error("before");
+
+		//  What logrotate does by default: move the file, then create a new empty one
+		File moved = new File(dir, "app.log.old");
+		Files.move(log.toPath(), moved.toPath());
+		Files.createFile(log.toPath());
+		waitForFileCheck();
+		logger.error("after");
+
+		assertEquals(List.of("before"), messages(moved));
+		assertEquals(List.of("after"), messages(log), "New entries should go to the new file");
+	}
+
+	@Test
+	public void testDeletedFileIsRecreated() throws Exception {
+		File dir = Files.createTempDirectory("bjl-deleted").toFile();
+		File log = new File(dir, "app.log");
+		BjlLogger logger = logger("test.deleted", props(BjlLogger.PROPERTY_LOG_FILE, log.getPath()));
+		logger.error("before");
+
+		Files.delete(log.toPath());
+		waitForFileCheck();
+		logger.error("after");
+
+		assertTrue(log.exists(), "The log file should be created again");
+		assertEquals(List.of("after"), messages(log));
+	}
+
+	@Test
+	public void testTruncatedFileKeepsRotating() throws Exception {
+		File dir = Files.createTempDirectory("bjl-truncated").toFile();
+		File log = new File(dir, "app.log");
+		BjlLogger logger = logger("test.truncated", props(
+				BjlLogger.PROPERTY_LOG_FILE, log.getPath(),
+				BjlLogger.PROPERTY_LOG_FILE_MAX_SIZE, "4K",
+				BjlLogger.PROPERTY_LOG_FILE_COUNT, "1"));
+		for(int i=0; i < 50; i++ ) {
+			logger.error("filler "+i);
+		}
+		assertFalse(new File(dir, "app.log.1").exists(), "Still under 4K");
+		long before = log.length();
+
+		//  logrotate's copytruncate: the file is emptied in place
+		Files.write(log.toPath(), new byte[0]);
+		waitForFileCheck();
+		List<String> expected = new ArrayList<>();
+		for(int i=0; i < 20; i++ ) {
+			logger.error("after "+i);
+			expected.add("after "+i);
+		}
+
+		assertEquals(expected, messages(log));
+		//  Counted from the new (empty) size. Counting the old size too would pass 4K and rotate now.
+		assertTrue(before+log.length() > 4096, "The test should write enough to pass 4K counting the old size");
+		assertFalse(new File(dir, "app.log.1").exists(), "The file should not have been rotated");
+	}
+
+	@Test
+	public void testCloseLogFiles() throws Exception {
+		File dir = Files.createTempDirectory("bjl-close").toFile();
+		File log = new File(dir, "app.log");
+		BjlLogger logger = logger("test.close", props(BjlLogger.PROPERTY_LOG_FILE, log.getPath()));
+		logger.error("before");
+
+		BjlLogger.closeLogFiles();
+		assertEquals(List.of("before"), messages(log), "Everything logged is in the file when it is closed");
+
+		//  Closed, so it can be moved away (Windows refuses while it is open)
+		File archived = new File(dir, "app.log.archived");
+		Files.move(log.toPath(), archived.toPath());
+
+		//  No wait needed: the next entry opens the file again
+		logger.error("after");
+		assertEquals(List.of("before"), messages(archived));
+		assertEquals(List.of("after"), messages(log));
+	}
 }

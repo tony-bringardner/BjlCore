@@ -82,7 +82,7 @@ public class BaseObject {
 	private static volatile int maxProperties = DEFAULT_MAX_PROPERTIES;
 
 	//  Loggers are shared by name (like log4j and java.util.logging) so we don't create
-	//  (and initialize) a new ILogger for every object instance.
+	//  (and initialize) a new ILogger for every object instance. Never trimmed: see findLogger().
 	private static final ConcurrentHashMap<String, ILogger> loggers = new ConcurrentHashMap<>();
 
 	private volatile boolean supportPrefixProperty = true;
@@ -684,6 +684,11 @@ public class BaseObject {
 
 	/**
 	 * Find (or create) the shared ILogger for this name.
+	 * <p>
+	 * Every ILogger created is kept until {@link #clearLoggerCache()} is called (like log4j and
+	 * java.util.logging, which also keep their loggers), so use names from a fixed set, such as class
+	 * names. A name built from changing data (a user, a session or a request id) adds a logger for
+	 * every value, and the cache grows for as long as the application runs.
 	 * 
 	 * @param name
 	 * @return the ILogger associated with the given name.

@@ -11,6 +11,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
@@ -77,6 +78,22 @@ public class BjlLogger extends BaseObject implements ILogger {
 
 	//  One PrintStream per log file, shared by all BjlLoggers, so the file is opened once (in append mode).
 	private static final ConcurrentHashMap<String, PrintStream> logFiles = new ConcurrentHashMap<>();
+	//  The file streams under those PrintStreams, for closeLogFiles()
+	private static final ConcurrentHashMap<String, LogFileStream> logFileStreams = new ConcurrentHashMap<>();
+
+	/**
+	 * Flush every log file and close it, so another program can move or delete it (Windows doesn't allow
+	 * that while the file is open). Logging can go on: a file is opened again by the next entry written to it.
+	 * Call it, for example, before the files are archived, or when the application shuts down.
+	 */
+	public static void closeLogFiles() {
+		for(PrintStream ps : logFiles.values()) {
+			ps.flush();
+		}
+		for(LogFileStream stream : logFileStreams.values()) {
+			stream.release();
+		}
+	}
 
 	private volatile ILogger.Level level = DEFAULT_LEVEL;
 	private String name;
@@ -247,7 +264,9 @@ public class BjlLogger extends BaseObject implements ILogger {
 						}
 						//  Buffered, and flushed at the end of every log entry (autoflush), so an entry is
 						//  written with one write instead of one per line of a stack trace.
-						ret = new PrintStream(new BufferedOutputStream(new LogFileStream(file, maxSize, count), 8192), true);
+						LogFileStream stream = new LogFileStream(file, maxSize, count);
+						ret = new PrintStream(new BufferedOutputStream(stream, 8192), true);
+						logFileStreams.put(key, stream);
 						logFiles.put(key, ret);
 					} catch (IOException e) {
 						System.err.println("Error opening log file "+file+ " e="+e+". Logging to System.out");
@@ -297,13 +316,24 @@ public class BjlLogger extends BaseObject implements ILogger {
 	 * Appends to a log file, starts a new one when it would grow past the maximum size, and reports
 	 * write errors (a full disk, say) on System.err. PrintStream hides them, so before this, log
 	 * entries could be lost without any sign.
+	 * <p>
+	 * At most once every {@link #CHECK_MILLIS} it also checks that the file is still there: if another
+	 * program (logrotate, say) has moved or deleted it, a new file is started under the same name.
+	 * Before, entries went on being written to the moved (or deleted) file, and the new one stayed empty.
 	 */
 	static final class LogFileStream extends OutputStream {
+		/** How often (milliseconds) a write checks that the file hasn't been moved or deleted. */
+		static final long CHECK_MILLIS = 1000;
+
 		private final File file;
 		private final long maxSize;
 		private final int count;
+		//  null when the file isn't open (see release()); the next write opens it
 		private FileOutputStream out;
 		private long size;
+		//  The file system's identity of the open file (null where there isn't one, Windows for example)
+		private Object fileKey;
+		private long lastCheck;
 		//  true from the first failed write until a write works again, so each failure is reported once
 		private boolean failing;
 
@@ -317,6 +347,64 @@ public class BjlLogger extends BaseObject implements ILogger {
 		private void open() throws IOException {
 			out = new FileOutputStream(file, true);
 			size = file.length();
+			fileKey = fileKey();
+			lastCheck = System.nanoTime();
+		}
+
+		private Object fileKey() {
+			try {
+				return Files.readAttributes(file.toPath(), BasicFileAttributes.class).fileKey();
+			} catch (IOException | RuntimeException e) {
+				return null;
+			}
+		}
+
+		/**
+		 * Start a new file if the open one has been moved or deleted (checked at most every CHECK_MILLIS).
+		 * A file that was truncated in place (logrotate's copytruncate) is still written to, from its new end.
+		 */
+		private void checkFile() throws IOException {
+			long now = System.nanoTime();
+			if( now-lastCheck < CHECK_MILLIS*1_000_000L ) {
+				return;
+			}
+			lastCheck = now;
+			Object key = fileKey();
+			if( key == null && !file.exists() ) {
+				//  Deleted, or moved and not replaced
+				reopen();
+			} else if( key != null && fileKey != null && !key.equals(fileKey) ) {
+				//  Moved, and a new file created under the name
+				reopen();
+			} else {
+				long length = file.length();
+				if( length < size ) {
+					//  Truncated: count from the new size so rotation by size still works
+					size = length;
+				}
+			}
+		}
+
+		private void reopen() throws IOException {
+			try {
+				out.close();
+			} catch (IOException e) {
+			}
+			out = null;
+			open();
+		}
+
+		/**
+		 * Close the file (see {@link BjlLogger#closeLogFiles()}); the next write opens it again.
+		 */
+		synchronized void release() {
+			if( out != null ) {
+				try {
+					out.close();
+				} catch (IOException e) {
+				}
+				out = null;
+			}
 		}
 
 		@Override
@@ -327,6 +415,12 @@ public class BjlLogger extends BaseObject implements ILogger {
 		@Override
 		public synchronized void write(byte[] b, int off, int len) throws IOException {
 			try {
+				if( out == null ) {
+					//  Closed by release()
+					open();
+				} else {
+					checkFile();
+				}
 				if( maxSize > 0 && size > 0 && size+len > maxSize ) {
 					rotate();
 				}
@@ -379,12 +473,17 @@ public class BjlLogger extends BaseObject implements ILogger {
 
 		@Override
 		public synchronized void flush() throws IOException {
-			out.flush();
+			if( out != null ) {
+				out.flush();
+			}
 		}
 
 		@Override
 		public synchronized void close() throws IOException {
-			out.close();
+			if( out != null ) {
+				out.close();
+				out = null;
+			}
 		}
 	}
 
