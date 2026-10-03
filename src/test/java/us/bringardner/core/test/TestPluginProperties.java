@@ -75,4 +75,32 @@ public class TestPluginProperties {
 			BaseObject.clearPropertyCache();
 		}
 	}
+
+	/**
+	 * The cache is kept per class loader: reading the plugin's file first must not give the class
+	 * on the class path the plugin's value, and reading the class path first must not hide the
+	 * plugin's file. Before, one cache was shared by every loader, so the first one searched won.
+	 */
+	@Test
+	public void testLoadersDoNotShareCachedProperties() throws Exception {
+		BaseObject.clearPropertyCache();
+		try {
+			//  Plugin first, then the class path, without clearing the cache in between
+			Class<?> plugin = new PluginLoader(getClass().getClassLoader()).loadClass(TARGET);
+			assertEquals("hello from the plugin", new LogHelper(plugin).getProperty("Greeting"));
+			assertNull(new LogHelper(IsolatedPropertyTarget.class).getProperty("Greeting"));
+
+			//  And the other way round, with a new plugin loader
+			BaseObject.clearPropertyCache();
+			assertNull(new LogHelper(IsolatedPropertyTarget.class).getProperty("Greeting"));
+			Class<?> plugin2 = new PluginLoader(getClass().getClassLoader()).loadClass(TARGET);
+			assertEquals("hello from the plugin", new LogHelper(plugin2).getProperty("Greeting"));
+
+			//  Both answers stay right when asked again (from the cache)
+			assertEquals("hello from the plugin", new LogHelper(plugin).getProperty("Greeting"));
+			assertNull(new LogHelper(IsolatedPropertyTarget.class).getProperty("Greeting"));
+		} finally {
+			BaseObject.clearPropertyCache();
+		}
+	}
 }

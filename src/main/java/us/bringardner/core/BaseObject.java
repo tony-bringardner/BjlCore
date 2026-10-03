@@ -6,7 +6,9 @@ package us.bringardner.core;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.Properties;
+import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
@@ -45,9 +47,9 @@ public class BaseObject {
 
 
 	/**
-	 * The most properties files (one per class searched, found or not) kept in the cache, see 
-	 * {@link #setMaxProperties(int)}. It was 200, which an application with a few hundred BaseObject 
-	 * classes went past, so files were read again and again.
+	 * The most properties files (one per class searched, found or not) kept in the cache for each
+	 * class loader, see {@link #setMaxProperties(int)}. It was 200, which an application with a few
+	 * hundred BaseObject classes went past, so files were read again and again.
 	 */
 	public static final int DEFAULT_MAX_PROPERTIES = 1000;
 	public static final String PROPERTY_LOGGER = "ILogger";
@@ -55,10 +57,28 @@ public class BaseObject {
 	private static final String FQCN = BaseObject.class.getName();
 	private static volatile Class<?>   loggerClass = null;
 
-	//  The properties files read, by class name (an empty Properties when there is no file).
-	//  A ConcurrentHashMap, so looking up a property doesn't take a lock. It was an LruMap, and 
-	//  because even get() reorders an LRU map every lookup took the same global lock.
-	private static final ConcurrentHashMap<String, Properties> properties = new ConcurrentHashMap<>();
+	//  Cached for a properties file that was looked for and not found. Never changed.
+	private static final Properties MISSING = new Properties();
+
+	//  The properties files read through each class loader, by class name (MISSING when there is no file).
+	//  Kept per loader because the same class name can have a different file (or none) in another loader:
+	//  with one cache for every loader, the first loader searched decided the result for all of them.
+	//  The keys are weak so a plugin's loader can still be garbage collected; the values only hold Strings.
+	//  Each map is a ConcurrentHashMap, so looking up a property doesn't take a lock. (It was an LruMap,
+	//  and because even get() reorders an LRU map every lookup took the same global lock.)
+	private static final Map<ClassLoader, ConcurrentHashMap<String, Properties>> loaderCaches = new WeakHashMap<>();
+
+	//  The cache for a class's loader, found once per class without a lock. A ClassValue doesn't keep
+	//  the class (or its loader) from being garbage collected.
+	private static final ClassValue<ConcurrentHashMap<String, Properties>> classCaches = new ClassValue<>() {
+		@Override
+		protected ConcurrentHashMap<String, Properties> computeValue(Class<?> type) {
+			synchronized (loaderCaches) {
+				return loaderCaches.computeIfAbsent(type.getClassLoader(), k -> new ConcurrentHashMap<>());
+			}
+		}
+	};
+
 	private static volatile int maxProperties = DEFAULT_MAX_PROPERTIES;
 
 	//  Loggers are shared by name (like log4j and java.util.logging) so we don't create
@@ -68,23 +88,34 @@ public class BaseObject {
 	private volatile boolean supportPrefixProperty = true;
 
 	/**
-	 * @param maxSize the most properties files kept in the cache, 0 (or less) for no limit. 
+	 * @param maxSize the most properties files kept in the cache for each class loader, 0 (or less) for no limit. 
 	 *  When there are more, some (not necessarily the least recently used) are dropped and read again when needed.
 	 */
 	public static void setMaxProperties(int maxSize) {
 		maxProperties = maxSize;
-		trimPropertyCache();
+		for(ConcurrentHashMap<String, Properties> cache : propertyCaches()) {
+			trimPropertyCache(cache);
+		}
 	}
 
-	private static void trimPropertyCache() {
+	private static void trimPropertyCache(ConcurrentHashMap<String, Properties> cache) {
 		int max = maxProperties;
 		if( max <= 0 ) {
 			return;
 		}
-		Iterator<String> it = properties.keySet().iterator();
-		while( properties.size() > max && it.hasNext() ) {
+		Iterator<String> it = cache.keySet().iterator();
+		while( cache.size() > max && it.hasNext() ) {
 			it.next();
 			it.remove();
+		}
+	}
+
+	//  A copy, so the caches can be changed without holding the lock
+	private static ConcurrentHashMap<String, Properties>[] propertyCaches() {
+		synchronized (loaderCaches) {
+			@SuppressWarnings("unchecked")
+			ConcurrentHashMap<String, Properties>[] ret = loaderCaches.values().toArray(new ConcurrentHashMap[0]);
+			return ret;
 		}
 	}
 
@@ -104,7 +135,10 @@ public class BaseObject {
 	 * the cache may be cleared to reduce the memory footprint.  
 	 */
 	public static void clearPropertyCache() {
-		properties.clear();
+		//  Cleared rather than replaced: the ClassValue keeps a reference to each map
+		for(ConcurrentHashMap<String, Properties> cache : propertyCaches()) {
+			cache.clear();
+		}
 	}
 
 	/**
@@ -170,63 +204,69 @@ public class BaseObject {
 	 * The objective is to allow each level, or 'name' to externals
 	 * values into property files that can be easily overridden at run time.
 	 * 
-	 * The BaseObject will maintain a map of Entries for each name as an indicator
-	 * the properties have been loaded, thus eliminating the need to search for the properties 
-	 * every time the getProperteis method is called.
-	 * 
+	 * The file is looked for through this object's class loader first, then (if it isn't found
+	 * there) through the loader of cls. What was found (or not) is cached for each class loader,
+	 * so the files are not searched for every time a property is read.
 	 *  
 	 * @param cls the class whose properties these are (used if this object's class can't see the file)
 	 * @param name
-	 * @return the Properties associated with the given name.
+	 * @return the Properties associated with the given name (empty if there is no file).
 	 */
 	private Properties getPropertyEntry(Class<?> cls, String name) {
-		Properties ret;
-		ret = properties.get(name);
-		if( ret == null ) {
-			//  Load outside the lock so a slow class path search does not block every other thread.
-			//  If two threads load the same file at the same time, the last one wins (the content is the same).
-			ret = new Properties();
-			try {
-				// First, see it we can find a file name "name.properties"
-				String path = null;
-				if( name.length() > 0 ) {
-					path = "/"+name.replace('.', '/');
-				} else {
-					path = name;
-				}
+		// First, see it we can find a file name "name.properties"
+		String path = null;
+		if( name.length() > 0 ) {
+			path = "/"+name.replace('.', '/');
+		} else {
+			path = name;
+		}
+		String fn = path+".properties";
 
-				String fn = path+".properties";
-				/*
-				 * If you run a bug detector this will show up as a bug...
-				 * Calling this.getClass().getResource(...) could give results other than expected if this class is extended by a class in another package
-				 * In this case we want that behavior.  It allows a property file to be replaced or overwritten by the extending class. 
-				 */
-				InputStream resource = getClass().getResourceAsStream(fn);
-				if( resource == null && cls != null && cls.getClassLoader() != getClass().getClassLoader() ) {
-					//  The class being searched may be in a class loader this object's class can't see
-					//  (a LogHelper or getPropertyClass() for a plugin class, for example).
-					resource = cls.getResourceAsStream(fn);
+		/*
+		 * If you run a bug detector this will show up as a bug...
+		 * Calling this.getClass().getResource(...) could give results other than expected if this class is extended by a class in another package
+		 * In this case we want that behavior.  It allows a property file to be replaced or overwritten by the extending class. 
+		 */
+		Class<?> mine = getClass();
+		Properties ret = loadProperties(mine, name, fn);
+		if( ret == MISSING && cls != null && cls.getClassLoader() != mine.getClassLoader() ) {
+			//  The class being searched may be in a class loader this object's class can't see
+			//  (a LogHelper or getPropertyClass() for a plugin class, for example).
+			ret = loadProperties(cls, name, fn);
+		}
+		return ret;
+	}
+
+	/**
+	 * @param via the class whose loader is searched
+	 * @param name the cache key (a class name)
+	 * @param fn the resource name of the properties file
+	 * @return the file's Properties, from the cache of via's class loader if it has been read before,
+	 *  or {@link #MISSING} if the loader doesn't have it.
+	 */
+	private static Properties loadProperties(Class<?> via, String name, String fn) {
+		ConcurrentHashMap<String, Properties> cache = classCaches.get(via);
+		Properties ret = cache.get(name);
+		if( ret == null ) {
+			//  Load outside any lock so a slow class path search does not block every other thread.
+			//  If two threads load the same file at the same time, the last one wins (the content is the same).
+			ret = MISSING;
+			try(InputStream in = via.getResourceAsStream(fn)){
+				if( in != null ) {
+					Properties tmp = new Properties();
+					tmp.load(in);
+					ret = tmp;
 				}
-				try(InputStream in = resource){
-					if( in != null ) {
-						ret  = new Properties();
-						ret.load(in);
-					}
-				}
-				
 			} catch(IOException e) {
 				// We cannot call the normal logging functions here because it could potentially cause a deadlock.
 				System.err.println("Error reading properties for "+name+" e=("+e+")");
 				e.printStackTrace(System.err);
-
-			} finally {
-				properties.put(name, ret);
-				if( properties.size() > maxProperties && maxProperties > 0 ) {
-					trimPropertyCache();
-				}
+			}
+			cache.put(name, ret);
+			if( cache.size() > maxProperties && maxProperties > 0 ) {
+				trimPropertyCache(cache);
 			}
 		}
-
 		return ret;
 	}
 
