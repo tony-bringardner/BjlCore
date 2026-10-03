@@ -52,6 +52,23 @@
   a host name that doesn't match it or a server that doesn't answer TLS failed on the caller's first
   read or write, and the socket was left for the caller to close. The handshake is now done in
   `getSocket()` (with the socket timeout), and the socket is closed if it fails.
+- Changing a security setting on a `SecureBaseObject` (`setKeyStorePassword`, `setTrustManagers`,
+  `setProtocol` ...) while another thread was in `getSSLContext()` could be lost: the context being
+  built from the old settings was kept after the setter had cleared it, and used from then on. The
+  setters (and `resetSecurityContext()`, also in `AbstractCoreServer` and `SocketClient`) are now
+  synchronized like the getters, so a setter waits for a build in progress and then clears it.
+- `SecureBaseObject.getSSLContext()` caught `Throwable`, so an `Error` such as `OutOfMemoryError` came
+  back as an `IOException`. It now wraps only `GeneralSecurityException`, `IOException` and
+  `RuntimeException`.
+- The properties file cache was shared by every class loader, so in plugin or application server setups
+  the first loader searched decided the result for all of them: a plugin's file could be returned for a
+  class with the same name in another loader, or a cached "not found" could hide it. The cache is now
+  kept per class loader, and doesn't keep a loader from being garbage collected.
+- `BjlLogger` kept writing to its log file after another program (logrotate, say) had moved or deleted
+  it, so new entries went to the moved file, or were lost, and the new file stayed empty. At most once a
+  second a write now checks the file and starts a new one under the same name if it has gone. A file
+  emptied in place (logrotate's `copytruncate`) is written to from its new end, and `LogFileMaxSize`
+  counts from its new size; before, it was rotated much too soon.
 
 ### Performance
 
@@ -70,6 +87,8 @@
 - `DEFAULT_MAX_PROPERTIES` is 1000 (was 200), so an application with a few hundred `BaseObject`
   classes doesn't read the same properties files again and again. Over the limit, the files dropped
   from the cache are no longer the least recently used ones.
+- `SearchableClassLoader` is registered as parallel capable, so threads loading different classes through
+  it no longer wait for each other.
 
 ### BjlLogger log files
 
@@ -77,6 +96,8 @@
   keep a number of old ones (`app.log.1`, `app.log.2` ...). Off by default, so log files grow as before.
 - A failure writing the log file (a full disk, say) was silently ignored and log entries were lost
   without any sign. It is now reported once on `System.err`, and again when writing works again.
+- New `BjlLogger.closeLogFiles()` flushes and closes every log file, so it can be moved or deleted
+  (Windows doesn't allow that while it is open). Logging can go on: the next entry opens the file again.
 
 ### Changed (may need a code change)
 
@@ -101,6 +122,11 @@
 - Secure sockets from `SocketClient.getSocket()` have finished the TLS handshake, so TLS settings made on
   the returned socket (enabled protocols, cipher suites) no longer apply. Make them in an override of
   `configure(Socket)`, which runs before the handshake. Sockets from `getSocketFactory()` are unchanged.
+- The `SecureBaseObject` setters are synchronized, so a setter called while another thread is in
+  `getSSLContext()` (loading a key store, say) waits for it to finish.
+- An `Error` thrown while `getSSLContext()` builds the context is no longer wrapped in an `IOException`.
+- `MaxProperties` (`setMaxProperties`, default 1000) is now the most properties files cached for each
+  class loader, not for all of them together. With one class loader nothing changes.
 
 ### Added
 
@@ -111,6 +137,21 @@
 - `Log4JLogger.isLog4jProviderAvailable()`.
 - `BaseThread` can run on virtual threads on Java 21+ (multi-release jar; see `BaseThread.VIRTUAL_THREADS_PROPERTY`).
 - `BaseThread.isAlive()`.
+- `KeepAlive` and `TcpNoDelay` properties (and `isKeepAlive()`/`setKeepAlive(boolean)`,
+  `isTcpNoDelay()`/`setTcpNoDelay(boolean)`) in `AbstractCoreServer` and `SocketClient`, applied to
+  sockets in `configure(Socket)`. Both are off by default.
+- An opt-in connection limit for `AbstractCoreServer` accept loops: the `MaxConnections` property
+  (`getMaxConnections()`/`setMaxConnections(int)`, default 0, no limit), `tryAcquireConnection()`,
+  `releaseConnection()` and `getActiveConnections()`. The server doesn't call them itself; see the
+  `tryAcquireConnection()` javadoc for how an accept loop uses them.
+- The sub-components of `TimePanel`, `DatePanel`, `DayPanel` and `DateTimeCombo` have names
+  (`Component.setName`), such as `hourSpinner`, `todayButton`, `btnBrowse` and `day1` to `day31`,
+  so tests and GUI tools can find them.
+
+### Deprecated
+
+- `ThreadSafeDateFormat`: every call takes the same lock. Use `java.time.format.DateTimeFormatter`,
+  which is thread safe without one. It will be removed in a future major version.
 
 ### Restored
 
@@ -118,6 +159,12 @@
   `DEFAULT_ERROR_SLEEP_TIME`, `SecureBaseObject.init()`, `SecureBaseObject.PROPERTY_FORCE_TLS_VERSION`,
   `BjlLogger.format` and `DateTimeCombo.setdate(Date)` were removed or renamed in 1.1.0 and are back
   (deprecated) because other BJL projects still use them (BJL-53).
+
+### Documentation
+
+- `BaseObject.findLogger(String)` and `LogHelper(String)`: loggers are kept for as long as the application
+  runs, so logger names should come from a fixed set (class names), not from changing data such as a
+  user or request id.
 
 ## 1.1.0
 

@@ -30,7 +30,7 @@ BjlCore is published to GitHub Packages:
 <dependency>
     <groupId>us.bringardner</groupId>
     <artifactId>bjl_core</artifactId>
-    <version>1.1.0</version>
+    <version>1.2.0</version>
 </dependency>
 ```
 
@@ -73,7 +73,7 @@ public class Mailer extends BaseObject {
 | | `SocketClient` | Creates configured plain or SSL client sockets. |
 | | `LruMap` | A `LinkedHashMap` that drops the least recently used entry at a size limit. |
 | | `SearchableClassLoader` | Finds the direct (or all) sub classes / implementations of a type in jars and folders. Only the matching classes are loaded. |
-| | `ThreadSafeDateFormat` | A synchronized `SimpleDateFormat`. |
+| | `ThreadSafeDateFormat` | A synchronized `SimpleDateFormat`. Deprecated: use `java.time.format.DateTimeFormatter`. |
 | | `LogHelper` | Logging for code that can't extend `BaseObject`. |
 | `us.bringardner.core.swing` | `DatePanel`, `DayPanel`, `TimePanel`, `Clock` | Date and time picker panels. |
 | | `DateDialog`, `TimeDialog`, `DateAndTimeDialog` | Modal dialogs built from the panels. |
@@ -97,7 +97,8 @@ and a sub class inherits its parents' properties files.
   An invalid number prints a warning to `System.err` and returns the default. Only `true` (in any case) is true.
 - `setSupportPrefixProperty(false)` turns off the `<class name>.` lookups for one object.
   `setPropertyPrefix(...)` (protected) uses a different prefix.
-- Properties files are cached (up to 1000 by default, one per class searched). Use
+- Properties files are cached for each class loader (up to 1000 per loader by default, one per class
+  searched), so a plugin's files don't mix with those of a class with the same name elsewhere. Use
   `BaseObject.setMaxProperties(n)` to change the limit (0 for none), and
   `BaseObject.clearPropertyCache()` to re-read them.
 
@@ -133,6 +134,11 @@ It is configured with properties (see [Properties](#properties); the class name 
 
 The first logger to open a file decides its size limit. If writing to the log file fails (a full
 disk, say), that is reported once on `System.err`, and again when writing works again.
+
+If another program moves or deletes the log file (logrotate, say), a new one is started under the same
+name within a second; a file emptied in place (`copytruncate`) is written to from its new end.
+`BjlLogger.closeLogFiles()` flushes and closes all log files so they can be moved (Windows won't move
+an open file); the next entry opens the file again.
 
 Level names from other frameworks also work: `OFF`, `FATAL`, `SEVERE`, `WARNING`, `TRACE`,
 `ALL`, `FINE`, `FINER` and `FINEST`. An invalid level is reported and the default is used.
@@ -186,6 +192,9 @@ server socket from these properties (or the matching setters):
 | `AcceptTimeout` | `60000` ms | `accept()` timeout, so the loop can check `stopping` |
 | `SocketTimeout` | `60000` ms | Read timeout set by `configure(socket)` |
 | `IsSoLinger` / `SoLinger` | `false` / `10` s | SO_LINGER set by `configure(socket)` |
+| `KeepAlive` | `false` | SO_KEEPALIVE set by `configure(socket)`, to notice peers that vanish |
+| `TcpNoDelay` | `false` | TCP_NODELAY set by `configure(socket)`, so small writes aren't delayed |
+| `MaxConnections` | `0` (no limit) | Limit used by `tryAcquireConnection()` (see below) |
 | `secure` | `false` | Use SSL (see [SSL](#ssl)) |
 
 ```java
@@ -211,8 +220,13 @@ AbstractCoreServer server = new AbstractCoreServer(8080) {
 server.start();
 ```
 
+To limit how many connections are handled at once, an accept loop calls `tryAcquireConnection()`
+for each accepted socket (closing it if that returns false) and `releaseConnection()` when the
+connection ends. The server doesn't call them itself, so without that nothing is limited.
+
 `SocketClient` is the client side: `new SocketClient(useSSL).getSocket(host, port)` returns a
-socket configured with the same `SocketTimeout`, `IsSoLinger` and `SoLinger` properties.
+socket configured with the same `SocketTimeout`, `IsSoLinger`, `SoLinger`, `KeepAlive` and
+`TcpNoDelay` properties.
 
 ## SSL
 
@@ -248,6 +262,10 @@ Date value = combo.getDate();
 value, or the date you passed in if the user cancels (`isCanceled()` tells you which).
 `TimePanel` shows 12 or 24 hour time (set the default with `-DMilitaryTime=true`), can hide the
 analog `Clock`, and can show seconds and milliseconds. The clock's hands can be dragged.
+
+The parts of `TimePanel`, `DatePanel`, `DayPanel` and `DateTimeCombo` have names
+(`Component.getName()`), such as `hourSpinner`, `todayButton`, `btnBrowse` and `day1` to `day31`,
+so tests and GUI testing tools can find them.
 
 ## Building and testing
 
