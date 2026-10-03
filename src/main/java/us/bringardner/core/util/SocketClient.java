@@ -27,7 +27,6 @@ package us.bringardner.core.util;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketException;
@@ -39,7 +38,6 @@ import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
 
 import javax.net.SocketFactory;
-import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
@@ -131,7 +129,7 @@ public class SocketClient extends SecureBaseObject {
 				if( factory == null ) {
 					if( isSecure() ) {
 						SSLSocketFactory sf = getSSLContext().getSocketFactory();
-						factory = isVerifyHostname() ? new HostnameVerifyingFactory(sf) : sf;
+						factory = isVerifyHostname() ? TlsSockets.hostnameVerifying(sf) : sf;
 					} else {
 						factory = SocketFactory.getDefault();
 					}
@@ -170,67 +168,30 @@ public class SocketClient extends SecureBaseObject {
 	}
 
 	/**
-	 * Turns on the HTTPS host name check (RFC 2818) for every socket the wrapped factory makes,
-	 * including connected sockets (the TLS handshake doesn't start until the socket is used).
+	 * Put TLS on a connected socket, as the client (STARTTLS and the like), using this object's
+	 * SSLContext and host name check ({@link #isVerifyHostname()}), and do the handshake. Settings
+	 * that must be made before the handshake go in an override of {@link #configure(Socket)}, which
+	 * is called with the TLS socket first.
+	 *
+	 * @param plain a connected socket; closing the returned socket closes it too
+	 * @param host the host name the connection was made to (for SNI and the host name check)
+	 * @return the TLS socket, after the handshake
+	 * @throws IOException if the handshake fails (plain is closed) or the SSLContext can't be made
 	 */
-	private static final class HostnameVerifyingFactory extends SSLSocketFactory {
-		private final SSLSocketFactory delegate;
-
-		HostnameVerifyingFactory(SSLSocketFactory delegate) {
-			this.delegate = delegate;
-		}
-
-		private static Socket verify(Socket socket) {
-			if( socket instanceof SSLSocket ) {
-				SSLSocket ssl = (SSLSocket) socket;
-				SSLParameters params = ssl.getSSLParameters();
-				params.setEndpointIdentificationAlgorithm("HTTPS");
-				ssl.setSSLParameters(params);
+	public SSLSocket startTls(Socket plain, String host) throws IOException {
+		SSLSocket ret = TlsSockets.layer(getSSLContext(), plain, host, true, isVerifyHostname(), true);
+		try {
+			configure(ret);
+			ret.startHandshake();
+			return ret;
+		} catch (IOException | RuntimeException e) {
+			try {
+				ret.close();
+			} catch (IOException e2) {
 			}
-			return socket;
-		}
-
-		@Override
-		public String[] getDefaultCipherSuites() {
-			return delegate.getDefaultCipherSuites();
-		}
-
-		@Override
-		public String[] getSupportedCipherSuites() {
-			return delegate.getSupportedCipherSuites();
-		}
-
-		@Override
-		public Socket createSocket() throws IOException {
-			return verify(delegate.createSocket());
-		}
-
-		@Override
-		public Socket createSocket(Socket s, String host, int port, boolean autoClose) throws IOException {
-			return verify(delegate.createSocket(s, host, port, autoClose));
-		}
-
-		@Override
-		public Socket createSocket(String host, int port) throws IOException {
-			return verify(delegate.createSocket(host, port));
-		}
-
-		@Override
-		public Socket createSocket(String host, int port, InetAddress localHost, int localPort) throws IOException {
-			return verify(delegate.createSocket(host, port, localHost, localPort));
-		}
-
-		@Override
-		public Socket createSocket(InetAddress host, int port) throws IOException {
-			return verify(delegate.createSocket(host, port));
-		}
-
-		@Override
-		public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort) throws IOException {
-			return verify(delegate.createSocket(address, port, localAddress, localPort));
+			throw e;
 		}
 	}
-	
 
 	/**
 	 * Create a socket connected to the host:port and configured with the appropriate timeout values.
