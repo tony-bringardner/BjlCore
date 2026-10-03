@@ -37,7 +37,12 @@ import java.util.TimeZone;
  * 
  * @author Tony Bringardner
  *
+ * @deprecated every call takes the same lock, so threads using one instance wait for each other.
+ * Use {@link java.time.format.DateTimeFormatter} instead, which is immutable and thread safe without a lock
+ * (for a Date: {@code formatter.format(date.toInstant().atZone(ZoneId.systemDefault()))}).
+ * This class will be removed in a future major version.
  */
+@Deprecated(since = "1.2.0")
 public class ThreadSafeDateFormat {
 
 	private SimpleDateFormat format;

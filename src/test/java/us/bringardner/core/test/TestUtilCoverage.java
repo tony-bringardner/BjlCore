@@ -292,6 +292,7 @@ public class TestUtilCoverage {
 		assertSame(BaseObject.findLogger(TestUtilCoverage.class.getName()), helper.getLogger());
 	}
 
+	@SuppressWarnings("deprecation")
 	@Test
 	public void testThreadSafeDateFormatParse() throws ParseException {
 		ThreadSafeDateFormat fmt = new ThreadSafeDateFormat("yyyy-MM-dd HH:mm:ss");

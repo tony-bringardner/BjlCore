@@ -981,6 +981,7 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 		assertNull(map.get("Key1"), "Key1 was not removed from lru map");
 	}
 
+	@SuppressWarnings("deprecation")
 	@Test
 	public void testThreadSafeDateFormat() {
 		class DateFormatThread extends BaseThread {
