@@ -29,6 +29,14 @@
   (Retina) displays, leaked a `Graphics2D` on every repaint, and threw a `NullPointerException` when
   painted before it was displayable or with no size. It now draws directly in `paintComponent`.
   Pressing the mouse on a clock before its first paint also threw a `NullPointerException`.
+- With `Log4JLogger`, log4j layouts that show the caller (`%C`, `%M`, `%L`, `%l`) showed
+  `Log4JLogger.invoke` for every message. They now show the code that logged, whether it called the
+  logger directly or through `BaseObject.logError` (etc.), including the `Supplier` versions.
+
+### Performance
+
+- `Log4JLogger` calls log4j through cached `MethodHandle`s instead of `Method.invoke`. A disabled
+  `debug()` call (the most common kind) takes about half the time on Java 21 and two thirds on Java 11.
 
 ### Changed (may need a code change)
 

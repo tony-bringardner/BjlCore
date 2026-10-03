@@ -2,8 +2,12 @@
 
 package us.bringardner.core;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.function.Supplier;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -36,15 +40,27 @@ import java.util.ServiceLoader;
 public class Log4JLogger implements ILogger {
 
 	/**
-	 * All reflection is done once, when this class is first used, and shared by every Log4JLogger.
-	 * log4j2 is accessed by reflection so this library has no compile or runtime dependency on it.
+	 * The class name log4j is given as the logging "wrapper" so that layouts showing the caller
+	 * (%C %M %L %l) show the code that called this logger, not this class.
+	 */
+	private static final String FQCN = Log4JLogger.class.getName();
+
+	/** Passed as the Throwable by the methods that don't take one (it is never logged). */
+	static final Throwable NO_ERROR = new Throwable("no error", null, false, false) {
+		private static final long serialVersionUID = 1L;
+	};
+
+	/**
+	 * All the log4j2 methods are looked up once, when this class is first used, and shared by every Log4JLogger.
+	 * log4j2 is accessed this way so this library has no compile or runtime dependency on it.
+	 * The logging calls use MethodHandles in static final fields, which the JIT can inline. A disabled
+	 * debug() call takes about half to two thirds of the time it did with Method.invoke (Java 11 and 21).
 	 */
 	private static final class Log4j {
 		static final boolean available;
 		static final Throwable initError;
 		static final Method getLoggerByName;
-		static final Method debug1, debug2, info1, info2, warn1, warn2, error1, error2;
-		static final Method isDebug, isInfo, isWarn, isError, getLevel;
+		static final Method getLevel;
 		//  Optional: only available with log4j-core
 		static final Method configuratorSetLevel;
 		static final Map<String,Object> levels = new HashMap<>();
@@ -52,13 +68,25 @@ public class Log4JLogger implements ILogger {
 		static final Map<Class<?>,Method> setLevelMethods = new java.util.concurrent.ConcurrentHashMap<>();
 		static final Method NO_METHOD;
 		static final Class<?> levelClass;
+		/** org.apache.logging.log4j.spi.ExtendedLogger, which every log4j2 logger implementation implements */
+		static final Class<?> extendedLoggerClass;
+
+		/** ExtendedLogger.logIfEnabled(String fqcn, Level, Marker, Object message, Throwable) as (Object,String,Object,Object,Object,Throwable)void */
+		static final MethodHandle logIfEnabled;
+		/** Logger.log(Level, Object message, Throwable) as (Object,Object,Object,Throwable)void, for a logger that is not an ExtendedLogger */
+		static final MethodHandle log;
+		/** Logger.isEnabled(Level) as (Object,Object)boolean */
+		static final MethodHandle isEnabled;
+		/** The log4j2 Level for each ILogger.Level, by ordinal */
+		static final Object[] levelFor;
 
 		static {
 			boolean ok = false;
 			Throwable err = null;
-			Method gl=null, d1=null, d2=null, i1=null, i2=null, w1=null, w2=null, e1=null, e2=null;
-			Method isD=null, isI=null, isW=null, isE=null, getL=null, confSet=null, none=null;
-			Class<?> lc = null;
+			Method gl=null, getL=null, confSet=null, none=null;
+			MethodHandle lie=null, lg=null, ie=null;
+			Class<?> lc = null, ext = null;
+			Object[] lf = new Object[ILogger.Level.values().length];
 			try {
 				none = Object.class.getMethod("hashCode");
 				ClassLoader cl = Log4JLogger.class.getClassLoader();
@@ -66,22 +94,28 @@ public class Log4JLogger implements ILogger {
 				for(String name : new String[] {"OFF","FATAL","ERROR","WARN","INFO","DEBUG","TRACE","ALL"}) {
 					levels.put(name, lc.getField(name).get(null));
 				}
+				lf[ILogger.Level.NONE.ordinal()] = levels.get("OFF");
+				lf[ILogger.Level.ERROR.ordinal()] = levels.get("ERROR");
+				lf[ILogger.Level.WARN.ordinal()] = levels.get("WARN");
+				lf[ILogger.Level.INFO.ordinal()] = levels.get("INFO");
+				lf[ILogger.Level.DEBUG.ordinal()] = levels.get("DEBUG");
+
 				Class<?> logMgrClass = Class.forName("org.apache.logging.log4j.LogManager", true, cl);
 				Class<?> api = Class.forName("org.apache.logging.log4j.Logger", true, cl);
+				Class<?> marker = Class.forName("org.apache.logging.log4j.Marker", true, cl);
+				ext = Class.forName("org.apache.logging.log4j.spi.ExtendedLogger", true, cl);
 				gl = logMgrClass.getMethod("getLogger", String.class);
-				d1 = api.getMethod("debug", Object.class);
-				d2 = api.getMethod("debug", Object.class, Throwable.class);
-				i1 = api.getMethod("info", Object.class);
-				i2 = api.getMethod("info", Object.class, Throwable.class);
-				w1 = api.getMethod("warn", Object.class);
-				w2 = api.getMethod("warn", Object.class, Throwable.class);
-				e1 = api.getMethod("error", Object.class);
-				e2 = api.getMethod("error", Object.class, Throwable.class);
-				isD = api.getMethod("isDebugEnabled");
-				isI = api.getMethod("isInfoEnabled");
-				isW = api.getMethod("isWarnEnabled");
-				isE = api.getMethod("isErrorEnabled");
 				getL = api.getMethod("getLevel");
+
+				MethodHandles.Lookup lookup = MethodHandles.publicLookup();
+				lie = lookup.findVirtual(ext, "logIfEnabled",
+						MethodType.methodType(void.class, String.class, lc, marker, Object.class, Throwable.class))
+						.asType(MethodType.methodType(void.class, Object.class, String.class, Object.class, Object.class, Object.class, Throwable.class));
+				lg = lookup.findVirtual(api, "log",
+						MethodType.methodType(void.class, lc, Object.class, Throwable.class))
+						.asType(MethodType.methodType(void.class, Object.class, Object.class, Object.class, Throwable.class));
+				ie = lookup.findVirtual(api, "isEnabled", MethodType.methodType(boolean.class, lc))
+						.asType(MethodType.methodType(boolean.class, Object.class, Object.class));
 				try {
 					Class<?> conf = Class.forName("org.apache.logging.log4j.core.config.Configurator", true, cl);
 					confSet = conf.getMethod("setLevel", String.class, lc);
@@ -94,10 +128,14 @@ public class Log4JLogger implements ILogger {
 			}
 			available = ok;
 			initError = err;
-			getLoggerByName=gl; debug1=d1; debug2=d2; info1=i1; info2=i2; warn1=w1; warn2=w2; error1=e1; error2=e2;
-			isDebug=isD; isInfo=isI; isWarn=isW; isError=isE; getLevel=getL; configuratorSetLevel=confSet;
+			getLoggerByName=gl; getLevel=getL; configuratorSetLevel=confSet;
 			NO_METHOD = none;
 			levelClass = lc;
+			extendedLoggerClass = ext;
+			logIfEnabled = lie;
+			log = lg;
+			isEnabled = ie;
+			levelFor = lf;
 		}
 	}
 
@@ -165,6 +203,8 @@ public class Log4JLogger implements ILogger {
 	}
 
 	private volatile Object _logger;
+	//  true if _logger is an ExtendedLogger (set before _logger)
+	private volatile boolean extended;
 	private volatile String name = Log4JLogger.class.getName();
 	//  Used if log4j is not available (or can't create the logger) so logging is never lost.
 	private volatile BjlLogger fallback;
@@ -207,82 +247,146 @@ public class Log4JLogger implements ILogger {
 		return null;
 	}
 	
-	private boolean invokeBoolean(Method m) {
-		Object ret = invoke(m);
-		return ret instanceof Boolean && ((Boolean) ret).booleanValue();
+	/*
+	 * Logging must never throw, so errors from log4j are reported to System.err.
+	 */
+	private static void report(String what, Throwable e) {
+		if( e instanceof VirtualMachineError ) {
+			throw (VirtualMachineError) e;
+		}
+		System.err.println("Log4JLogger error calling "+what+" e="+e);
+	}
+
+	/**
+	 * Log a message.
+	 *
+	 * @param fqcn the class whose frames log4j skips to find the caller (this class, or BaseObject when it is called by BaseObject)
+	 * @param level
+	 * @param msg
+	 * @param error may be null, {@link #NO_ERROR} when the caller used a method without a Throwable
+	 */
+	void log(String fqcn, Level level, String msg, Throwable error) {
+		BjlLogger fb = fallback;
+		if( fb != null ) {
+			logTo(fb, level, msg, error);
+			return;
+		}
+		if( error == NO_ERROR ) {
+			error = null;
+		}
+		Object target = getLoggerObject();
+		Object l4jLevel = Log4j.levelFor[level.ordinal()];
+		try {
+			if( extended ) {
+				Log4j.logIfEnabled.invokeExact(target, fqcn, l4jLevel, (Object) null, (Object) msg, error);
+			} else {
+				Log4j.log.invokeExact(target, l4jLevel, (Object) msg, error);
+			}
+		} catch (Throwable e) {
+			report("log", e);
+		}
+	}
+
+	/**
+	 * Log a message that is only built if the level is enabled.
+	 *
+	 * @param fqcn see {@link #log(String, Level, String, Throwable)}
+	 * @param level
+	 * @param msg
+	 */
+	void log(String fqcn, Level level, Supplier<String> msg) {
+		if( isEnabled(level) ) {
+			log(fqcn, level, msg.get(), NO_ERROR);
+		}
+	}
+
+	/*
+	 * Call the same method on the fallback logger as the caller called on this one 
+	 * (BjlLogger writes debug(msg) and debug(msg,null) to different streams).
+	 */
+	private static void logTo(ILogger logger, Level level, String msg, Throwable error) {
+		boolean one = error == NO_ERROR;
+		switch (level) {
+		case DEBUG: if( one ) logger.debug(msg); else logger.debug(msg, error); break;
+		case INFO:  if( one ) logger.info(msg);  else logger.info(msg, error);  break;
+		case WARN:  if( one ) logger.warn(msg);  else logger.warn(msg, error);  break;
+		case ERROR: if( one ) logger.error(msg); else logger.error(msg, error); break;
+		default: break;
+		}
+	}
+
+	boolean isEnabled(Level level) {
+		BjlLogger fb = fallback;
+		if( fb != null ) {
+			switch (level) {
+			case DEBUG: return fb.isDebugEnabled();
+			case INFO: return fb.isInfoEnabled();
+			case WARN: return fb.isWarnEnabled();
+			case ERROR: return fb.isErrorEnabled();
+			default: return false;
+			}
+		}
+		Object target = getLoggerObject();
+		try {
+			return (boolean) Log4j.isEnabled.invokeExact(target, Log4j.levelFor[level.ordinal()]);
+		} catch (Throwable e) {
+			report("isEnabled", e);
+			return false;
+		}
 	}
 
 	public void debug(String msg) {
-		BjlLogger fb = fallback;
-		if( fb != null ) {
-			fb.debug(msg);
-		} else {
-			invoke(Log4j.debug1, msg);
-		}
+		log(FQCN, Level.DEBUG, msg, NO_ERROR);
 	}
 
-
 	public void debug(String msg, Throwable error) {
-		BjlLogger fb = fallback;
-		if( fb != null ) {
-			fb.debug(msg,error);
-		} else {
-			invoke(Log4j.debug2, msg, error);
-		}
+		log(FQCN, Level.DEBUG, msg, error);
 	}
 
 	public void info(String msg) {
-		BjlLogger fb = fallback;
-		if( fb != null ) {
-			fb.info(msg);
-		} else {
-			invoke(Log4j.info1, msg);
-		}
+		log(FQCN, Level.INFO, msg, NO_ERROR);
 	}
 
 	public void info(String msg, Throwable error) {
-		BjlLogger fb = fallback;
-		if( fb != null ) {
-			fb.info(msg,error);
-		} else {
-			invoke(Log4j.info2, msg, error);
-		}
+		log(FQCN, Level.INFO, msg, error);
 	}
 
 	public void error(String msg) {
-		BjlLogger fb = fallback;
-		if( fb != null ) {
-			fb.error(msg);
-		} else {
-			invoke(Log4j.error1, msg);
-		}
+		log(FQCN, Level.ERROR, msg, NO_ERROR);
 	}
 
 	public void error(String msg, Throwable error) {
-		BjlLogger fb = fallback;
-		if( fb != null ) {
-			fb.error(msg,error);
-		} else {
-			invoke(Log4j.error2, msg, error);
-		}
+		log(FQCN, Level.ERROR, msg, error);
 	}
 
 	public void warn(String msg) {
-		BjlLogger fb = fallback;
-		if( fb != null ) {
-			fb.warn(msg);
-		} else {
-			invoke(Log4j.warn1, msg);
-		}
+		log(FQCN, Level.WARN, msg, NO_ERROR);
 	}
 
 	public void warn(String msg, Throwable error) {
-		BjlLogger fb = fallback;
-		if( fb != null ) {
-			fb.warn(msg,error);
-		} else {
-			invoke(Log4j.warn2, msg, error);
-		}
+		log(FQCN, Level.WARN, msg, error);
+	}
+
+	//  These override the ILogger defaults so the caller log4j reports isn't the ILogger interface
+
+	@Override
+	public void debug(Supplier<String> msg) {
+		log(FQCN, Level.DEBUG, msg);
+	}
+
+	@Override
+	public void info(Supplier<String> msg) {
+		log(FQCN, Level.INFO, msg);
+	}
+
+	@Override
+	public void warn(Supplier<String> msg) {
+		log(FQCN, Level.WARN, msg);
+	}
+
+	@Override
+	public void error(Supplier<String> msg) {
+		log(FQCN, Level.ERROR, msg);
 	}
 
 	/**
@@ -298,30 +402,29 @@ public class Log4JLogger implements ILogger {
 			return;
 		}
 		try {
-			_logger = Log4j.getLoggerByName.invoke(null, this.name);
+			Object tmp = Log4j.getLoggerByName.invoke(null, this.name);
+			//  Every log4j2 logger implementation is an ExtendedLogger, which lets us tell log4j who the caller is
+			extended = Log4j.extendedLoggerClass.isInstance(tmp);
+			_logger = tmp;
 		} catch (Exception e) {
 			useFallback(this.name, e instanceof InvocationTargetException ? e.getCause() : e);
 		}
 	}
 
 	public boolean isDebugEnabled() {
-		BjlLogger fb = fallback;
-		return fb != null ? fb.isDebugEnabled() : invokeBoolean(Log4j.isDebug);
+		return isEnabled(Level.DEBUG);
 	}
 
 	public boolean isWarnEnabled() {
-		BjlLogger fb = fallback;
-		return fb != null ? fb.isWarnEnabled() : invokeBoolean(Log4j.isWarn);
+		return isEnabled(Level.WARN);
 	}
 
 	public boolean isErrorEnabled() {
-		BjlLogger fb = fallback;
-		return fb != null ? fb.isErrorEnabled() : invokeBoolean(Log4j.isError);
+		return isEnabled(Level.ERROR);
 	}
 
-	public boolean isInfoEnabled() {		
-		BjlLogger fb = fallback;
-		return fb != null ? fb.isInfoEnabled() : invokeBoolean(Log4j.isInfo);
+	public boolean isInfoEnabled() {
+		return isEnabled(Level.INFO);
 	}
 
 	public void setLevel(Level level) {
