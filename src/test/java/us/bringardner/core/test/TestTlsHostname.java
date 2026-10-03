@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.io.File;
 import java.io.IOException;
@@ -177,8 +178,41 @@ public class TestTlsHostname {
 
 	@Test
 	public void testCertificateForAnotherHostIsRejected() throws Exception {
-		try (Socket s = client().getSocket("localhost", otherNameServer.getServerSocket().getLocalPort())) {
-			assertThrows(SSLException.class, () -> echo(s), "A certificate for bringardner.us must not be accepted for localhost");
+		//  getSocket() does the handshake, so the check fails there (not on the first read or write)
+		int port = otherNameServer.getServerSocket().getLocalPort();
+		assertThrows(SSLException.class, () -> client().getSocket("localhost", port), "A certificate for bringardner.us must not be accepted for localhost");
+	}
+
+	@Test
+	public void testGetSocketReturnsAfterTheHandshake() throws Exception {
+		try (Socket s = client().getSocket("localhost", localhostServer.getServerSocket().getLocalPort())) {
+			assertNotNull(((SSLSocket) s).getSession().getPeerCertificates(), "The handshake should be done");
+			s.getOutputStream().write(7);
+			s.getOutputStream().flush();
+			assertEquals(7, s.getInputStream().read());
+		}
+	}
+
+	@Test
+	public void testServerThatNeverAnswersTlsTimesOutInGetSocket() throws Exception {
+		//  A plain TCP server that accepts and never says anything: before, getSocket() returned a socket
+		//  and the caller's first read or write hung (up to the socket timeout) in the handshake.
+		try (ServerSocket silent = new ServerSocket(0, 50, java.net.InetAddress.getLoopbackAddress())) {
+			Thread acceptor = new Thread(() -> {
+				try (Socket s = silent.accept()) {
+					Thread.sleep(10000);
+				} catch (Exception e) {
+				}
+			});
+			acceptor.setDaemon(true);
+			acceptor.start();
+			SocketClient client = client();
+			client.setSocketTimeout(1000);
+			long start = System.currentTimeMillis();
+			assertThrows(java.net.SocketTimeoutException.class, () -> client.getSocket("localhost", silent.getLocalPort()));
+			long elapsed = System.currentTimeMillis()-start;
+			assertTrue(elapsed < 5000, "getSocket took "+elapsed+" ms");
+			acceptor.interrupt();
 		}
 	}
 

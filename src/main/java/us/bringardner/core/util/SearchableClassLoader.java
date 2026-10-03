@@ -130,6 +130,20 @@ public class SearchableClassLoader extends URLClassLoader {
 		final Set<Class<?>> found = new LinkedHashSet<>();
 		//  For includeIndirect: class name -> could it be a sub type of target
 		final Map<String, Boolean> mayExtend = new HashMap<>();
+		//  The real paths of the directories and jars already searched. A symbolic link back to a
+		//  parent directory made the search go round and round: with two such links it never ended.
+		final Set<String> searched = new java.util.HashSet<>();
+
+		/** @return true the first time this file (or directory) is seen, by its real path */
+		boolean firstVisit(File file) {
+			String key;
+			try {
+				key = file.toPath().toRealPath().toString();
+			} catch (IOException | RuntimeException e) {
+				key = file.getAbsolutePath();
+			}
+			return searched.add(key);
+		}
 
 		Search(Class<?> target, boolean includeIndirect) {
 			this.target = target;
@@ -407,6 +421,9 @@ public class SearchableClassLoader extends URLClassLoader {
 	}
 
 	private void proccessDir(File root, File dir, Search search) {
+		if( !search.firstVisit(dir) ) {
+			return;
+		}
 		File[] kids = dir.listFiles();
 		if( kids != null) {
 			//  sort so the results are the same on every platform / file system
@@ -429,6 +446,9 @@ public class SearchableClassLoader extends URLClassLoader {
 	}
 
 	private void parseJar(File jar, Search search) throws IOException {
+		if( !search.firstVisit(jar) ) {
+			return;
+		}
 		try(ZipFile file = new ZipFile(jar)) {
 			Enumeration<? extends ZipEntry> i = file.entries();
 			while( i.hasMoreElements()) {

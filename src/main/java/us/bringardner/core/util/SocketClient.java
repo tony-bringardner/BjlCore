@@ -225,7 +225,9 @@ public class SocketClient extends SecureBaseObject {
 	/**
 	 * Create a socket connected to the host:port and configured with the appropriate timeout values.
 	 * The connection attempt gives up after {@link #getConnectTimeout()} milliseconds
-	 * (with a SocketTimeoutException). If anything fails the socket is closed before the exception is thrown.
+	 * (with a SocketTimeoutException). A secure socket has finished its TLS handshake when it is
+	 * returned, so set TLS options (enabled protocols, say) in {@link #configure(Socket)}.
+	 * If anything fails the socket is closed before the exception is thrown.
 	 *
 	 * @param host
 	 * @param port
@@ -255,6 +257,14 @@ public class SocketClient extends SecureBaseObject {
 				ret = sf.createSocket(host, port);
 			}
 			configure(ret);
+			if( ret instanceof SSLSocket ) {
+				//  Do the TLS handshake now (with the socket timeout set by configure) so a bad certificate,
+				//  a host name that doesn't match it or a server that doesn't answer fails here, and the
+				//  socket is closed below. Before, the handshake waited for the first read or write, so these
+				//  failures turned up in the caller's code and the socket was left for the caller to close.
+				//  TLS settings (enabled protocols, say) must be made in configure(), before this.
+				((SSLSocket) ret).startHandshake();
+			}
 			return ret;
 		} catch (IOException | RuntimeException e) {
 			if( ret != null ) {

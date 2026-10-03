@@ -32,6 +32,26 @@
 - With `Log4JLogger`, log4j layouts that show the caller (`%C`, `%M`, `%L`, `%l`) showed
   `Log4JLogger.invoke` for every message. They now show the code that logged, whether it called the
   logger directly or through `BaseObject.logError` (etc.), including the `Supplier` versions.
+- A server could keep its port after it had stopped. If `stop()` was called before the run method
+  asked for its socket (a `start()` followed at once by `stop()`, say), `getServerSocket()` opened a
+  new socket that nothing closed. While the server thread is stopping it now throws a `SocketException`
+  instead; once the thread has ended it works as before.
+- A `BaseThread` whose run method threw could not be started again: `running` stayed true, so
+  `start()` did nothing. `running` is now cleared when the run method ends, however it ends, and
+  `start()` checks whether the thread is alive.
+- `JulLogger` logged debug messages at `FINEST`, so with the java.util.logging level at `FINE` or
+  `FINER`, `getLevel()` said `DEBUG` but debug messages weren't logged. They are now logged at `FINE`,
+  and at `CONFIG` `getLevel()` says `INFO`.
+- `JulLogger` reported `JulLogger.log` as the source class and method of every message. It now
+  reports the code that logged, whether it called the logger directly or through `BaseObject.logError`
+  (etc.), including the `Supplier` versions.
+- `SearchableClassLoader.findTarget` followed symbolic links to directories without noticing it had been
+  there before. A link back to a parent directory made it search the same files again and again; with
+  two such links the search never finished. Each directory and jar is now searched once.
+- `SocketClient.getSocket()` returned secure sockets before the TLS handshake, so a bad certificate,
+  a host name that doesn't match it or a server that doesn't answer TLS failed on the caller's first
+  read or write, and the socket was left for the caller to close. The handshake is now done in
+  `getSocket()` (with the socket timeout), and the socket is closed if it fails.
 
 ### Performance
 
@@ -74,6 +94,13 @@
   whose certificate doesn't match the name used to reach it (a test certificate, or connecting by IP
   address to a certificate without that address) now fails the TLS handshake; set the `VerifyHostname`
   property to false, or call `setVerifyHostname(false)`, for those.
+- `AbstractCoreServer.getServerSocket()` throws a `SocketException` while the server thread is
+  stopping and its socket has been closed. A run method should check `stopping` when it gets one.
+- `JulLogger` logs debug messages at `FINE` instead of `FINEST`. A java.util.logging filter or
+  configuration that picks out debug messages by the `FINEST` level needs to use `FINE`.
+- Secure sockets from `SocketClient.getSocket()` have finished the TLS handshake, so TLS settings made on
+  the returned socket (enabled protocols, cipher suites) no longer apply. Make them in an override of
+  `configure(Socket)`, which runs before the handshake. Sockets from `getSocketFactory()` are unchanged.
 
 ### Added
 

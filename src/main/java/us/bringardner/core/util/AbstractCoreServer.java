@@ -125,10 +125,17 @@ public abstract class AbstractCoreServer extends BaseThread  {
 	 * The socket is created the first time this is called and then reused. If it has been
 	 * closed (by {@link #stop()}, {@link #closeServerSocket()} or the run method) a new
 	 * one is created, so a server can be stopped and started again.
+	 * <p>
+	 * While the server thread is stopping (after {@link #stop()} and before the thread ends)
+	 * a new socket is not created: this throws a SocketException instead. Before, a run method
+	 * that asked for the socket just after stop() was called (a start() followed at once by
+	 * stop(), say) opened a new socket that nothing closed, so the port stayed in use after the
+	 * server had stopped.
 	 *
 	 * @return ServerSocket used by this Server
 	 *
 	 * @throws IOException
+	 * @throws SocketException if the server is stopping and the socket has been closed
 	 */
 	public ServerSocket getServerSocket() throws IOException {
 		ServerSocket ret = serverSocket;
@@ -136,6 +143,11 @@ public abstract class AbstractCoreServer extends BaseThread  {
 			synchronized (this) {
 				ret = serverSocket;
 				if( ret == null || ret.isClosed() ) {
+					//  stop() sets stopping before closeServerSocket() takes this lock, so either the socket
+					//  created here is closed by stop() or stopping is seen here: never one left open.
+					if( stopping && isAlive() ) {
+						throw new SocketException("The server is stopping");
+					}
 					ret = getServerSocketFactory().createServerSocket(getPort(),getBacklog(),getBindAddr());
 					try {
 						ret.setSoTimeout(getAcceptTimeout());

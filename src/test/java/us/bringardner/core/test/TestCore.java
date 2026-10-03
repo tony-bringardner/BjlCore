@@ -614,7 +614,8 @@ Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) wi
 		boolean ret = false;
 		if( one.equals("NONE") && two.equals("OFF")) {
 			ret = true;
-		} else if( one.equals("DEBUG") && two.equals("FINEST")) {
+		} else if( one.equals("DEBUG") && two.equals("FINE")) {
+			//  JulLogger logs debug messages at FINE (FINEST before 1.2.0)
 			ret = true;
 		} else if( one.equals("ERROR") && two.equals("SEVERE")) {
 			ret = true;

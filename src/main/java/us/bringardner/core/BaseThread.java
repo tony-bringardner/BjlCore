@@ -302,7 +302,19 @@ public abstract class BaseThread extends SecureBaseObject implements Runnable {
 	 * @return a new thread that runs this object
 	 */
 	protected Thread createThread(boolean virtual) {
-		return Threads.create(this, virtual);
+		return Threads.create(this::runThread, virtual);
+	}
+
+	/**
+	 * Runs {@link #run()} and then clears {@link #running}, even when run() throws. Before, a run
+	 * method that threw left running true, and start() refused to start the thread again.
+	 */
+	private void runThread() {
+		try {
+			run();
+		} finally {
+			running = false;
+		}
 	}
 
 	/**
@@ -355,7 +367,12 @@ public abstract class BaseThread extends SecureBaseObject implements Runnable {
 	public synchronized void start() {
 		Thread current = thread;
 		//  Don't start a second thread while the first one is starting or still running.
-		if( !running && (current == null || !current.isAlive()) ) {
+		//  Ask the thread rather than the running field: a run method that threw (or a createThread()
+		//  override that runs this object directly) may have left running true after the thread ended.
+		//  Without a thread (run() called by an executor, say) running is all there is to go on.
+		boolean busy = current != null ? current.isAlive() : running;
+		if( !busy ) {
+			running = false;
 			stopping = false;
 			started = false;
 			thread = createThread(isVirtual());

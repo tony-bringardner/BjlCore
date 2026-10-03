@@ -49,12 +49,21 @@ public class JulLogger implements ILogger {
 		return logger;
 	}
 	
+	/**
+	 * The java.util.logging level debug messages are logged at. It was FINEST, so with the level
+	 * set to FINE (or FINER) {@link #getLevel()} said DEBUG but debug messages were not logged.
+	 */
+	private static final java.util.logging.Level DEBUG_LEVEL = java.util.logging.Level.FINE;
+
+	//  Stack frames skipped when finding the code that logged (logging "wrapper" classes)
+	private static final StackWalker WALKER = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE);
+
 	public void debug(String msg) {		
-			log(java.util.logging.Level.FINEST, msg, null);	
+		log(DEBUG_LEVEL, msg, null);	
 	}
 
 	public void debug(String msg, Throwable error) {
-		log(java.util.logging.Level.FINEST, msg, error);
+		log(DEBUG_LEVEL, msg, error);
 	}
 
 	private void log(java.util.logging.Level level, String msg, Throwable error) {
@@ -64,9 +73,35 @@ public class JulLogger implements ILogger {
 			if( error != null ) {
 				error.printStackTrace(System.err);
 			}
-		} else {
-			tmp.log(level, msg,error);
+		} else if( tmp.isLoggable(level) ) {
+			//  Name the code that logged as the source. Without it java.util.logging works out the
+			//  source itself, and reported JulLogger.log for every message.
+			StackWalker.StackFrame caller = findCaller();
+			if( caller != null ) {
+				tmp.logp(level, caller.getClassName(), caller.getMethodName(), msg, error);
+			} else {
+				tmp.log(level, msg, error);
+			}
 		}
+	}
+
+	/**
+	 * @return the first stack frame that isn't in a logging class (this one, a subclass of it,
+	 * BaseObject's logError etc. or the ILogger Supplier methods), or null if there is none.
+	 */
+	private static StackWalker.StackFrame findCaller() {
+		try {
+			return WALKER.walk(frames -> frames
+					.filter(f -> !isLoggingClass(f.getDeclaringClass()))
+					.findFirst()
+					.orElse(null));
+		} catch (RuntimeException e) {
+			return null;
+		}
+	}
+
+	private static boolean isLoggingClass(Class<?> cls) {
+		return JulLogger.class.isAssignableFrom(cls) || cls == BaseObject.class || cls == ILogger.class;
 	}
 
 	private boolean isLoggable(java.util.logging.Level level) {
@@ -99,7 +134,7 @@ public class JulLogger implements ILogger {
 	}
 
 	public boolean isDebugEnabled() {
-		return isLoggable(java.util.logging.Level.FINEST);
+		return isLoggable(DEBUG_LEVEL);
 	}
 
 	public boolean isErrorEnabled() {
@@ -121,7 +156,8 @@ public class JulLogger implements ILogger {
 	 *	ERROR -&gt; SEVERE
 	 *	WARN  -&gt; WARNING
 	 *	INFO  -&gt; INFO
-	 *	DEBUG -&gt; FINEST
+	 *	DEBUG -&gt; FINEST (debug messages are logged at FINE, so FINEST shows them and any FINER and FINEST
+	 *	         messages logged directly with java.util.logging)
 	 */
 	public void setLevel(Level level) {
 		java.util.logging.Level ret = java.util.logging.Level.OFF;
@@ -213,10 +249,11 @@ public class JulLogger implements ILogger {
 			ret = Level.ERROR;
 		} else if( val >= java.util.logging.Level.WARNING.intValue()) {
 			ret = Level.WARN;
-		} else if( val >= java.util.logging.Level.INFO.intValue()) {
+		} else if( val > DEBUG_LEVEL.intValue()) {
+			//  INFO and CONFIG (debug messages, at FINE, are not logged)
 			ret = Level.INFO;
 		} else {
-			//  CONFIG, FINE, FINER, FINEST and ALL
+			//  FINE, FINER, FINEST and ALL
 			ret = Level.DEBUG;
 		}
 		
