@@ -153,7 +153,7 @@ public class SocketClient extends SecureBaseObject {
 	 *
 	 * @param verifyHostname
 	 */
-	public void setVerifyHostname(boolean verifyHostname) {
+	public synchronized void setVerifyHostname(boolean verifyHostname) {
 		this.verifyHostname = verifyHostname;
 		//  The factory depends on it
 		factory = null;
@@ -301,7 +301,7 @@ public class SocketClient extends SecureBaseObject {
 	
 
 	@Override
-	protected void resetSecurityContext() {
+	protected synchronized void resetSecurityContext() {
 		super.resetSecurityContext();
 		//  The factory was created from the old SSLContext
 		factory = null;

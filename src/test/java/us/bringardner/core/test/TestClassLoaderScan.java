@@ -144,4 +144,11 @@ public class TestClassLoaderScan {
 	public void testDirectSubclasses() throws Exception {
 		check(Thread.class, false);
 	}
+
+	@Test
+	public void testParallelCapable() throws Exception {
+		try(SearchableClassLoader loader = new SearchableClassLoader(new URL[0], getClass().getClassLoader())) {
+			assertTrue(loader.isRegisteredAsParallelCapable(), "loadClass should not lock the whole loader");
+		}
+	}
 }

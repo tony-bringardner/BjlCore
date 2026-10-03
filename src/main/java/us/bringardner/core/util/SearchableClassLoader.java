@@ -47,6 +47,12 @@ import java.util.zip.ZipFile;
  */
 public class SearchableClassLoader extends URLClassLoader {
 
+	//  URLClassLoader is parallel capable but a subclass must register too, otherwise
+	//  loadClass locks the whole loader and threads loading classes wait for each other.
+	static {
+		ClassLoader.registerAsParallelCapable();
+	}
+
 	public static SearchableClassLoader getClassPathLoader() {
 		return SearchableClassLoader.getLoader(Arrays.asList(System.getProperty("java.class.path").split(File.pathSeparator)));
 	}

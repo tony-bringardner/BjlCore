@@ -350,12 +350,12 @@ public abstract class AbstractCoreServer extends BaseThread  {
 	/**
 	 * @param factory to use when creating the ServerSocket 
 	 */
-	public void setServerSocketFactory(ServerSocketFactory factory) {
+	public synchronized void setServerSocketFactory(ServerSocketFactory factory) {
 		this.factory = factory;
 	}
 
 	@Override
-	protected void resetSecurityContext() {
+	protected synchronized void resetSecurityContext() {
 		super.resetSecurityContext();
 		//  The factory was created from the old SSLContext
 		factory = null;

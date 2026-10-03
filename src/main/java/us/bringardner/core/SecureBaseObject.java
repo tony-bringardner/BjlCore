@@ -5,6 +5,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
@@ -138,7 +139,7 @@ public class SecureBaseObject extends BaseObject {
 	 * Set true if Object represent a secure connection.  Otherwise, false.
 	 * @param secure
 	 */
-	public void setSecure(boolean secure) {
+	public synchronized void setSecure(boolean secure) {
 		this.secure = secure;
 		resetSecurityContext();
 	}
@@ -149,7 +150,7 @@ public class SecureBaseObject extends BaseObject {
 	 * Subclasses that cache objects built from the SSLContext should override this 
 	 * (and call super.resetSecurityContext()).
 	 */
-	protected void resetSecurityContext() {
+	protected synchronized void resetSecurityContext() {
 		sslContext = null;
 	}
 
@@ -172,7 +173,8 @@ public class SecureBaseObject extends BaseObject {
 						tmp.init(getKeyManagers(), getTrustManagers() , getSecureRandom());
 						sslContext = tmp;
 
-					} catch (Throwable e) {
+					} catch (GeneralSecurityException | IOException | RuntimeException e) {
+						//  Not Throwable: an Error (OutOfMemoryError, say) must not be turned into an IOException
 						throw new IOException(e);
 					}
 				}
@@ -188,7 +190,7 @@ public class SecureBaseObject extends BaseObject {
 	 * 
 	 * @param context
 	 */
-	public void setSSLContext(SSLContext context) {
+	public synchronized void setSSLContext(SSLContext context) {
 		resetSecurityContext();
 		this.sslContext = context;
 	}
@@ -206,7 +208,7 @@ public class SecureBaseObject extends BaseObject {
 	 * Set the SecureRandom used to initialize the SSLContext (may be null).
 	 * @param secureRandom
 	 */
-	public void setSecureRandom(SecureRandom secureRandom) {
+	public synchronized void setSecureRandom(SecureRandom secureRandom) {
 		this.secureRandom = secureRandom;
 		resetSecurityContext();
 	}
@@ -217,7 +219,7 @@ public class SecureBaseObject extends BaseObject {
 	 * 
 	 * @param keyManagers
 	 */
-	public void setKeyManagers(KeyManager[] keyManagers) {
+	public synchronized void setKeyManagers(KeyManager[] keyManagers) {
 		this.keyManagers = keyManagers;
 		resetSecurityContext();
 	}
@@ -278,7 +280,7 @@ public class SecureBaseObject extends BaseObject {
 	 * Set the KeyManagerFactory used to generate the KeyManagers and initialize the SSLContext.
 	 * @param keyManagerFactory
 	 */
-	public void setKeyManagerFactory(KeyManagerFactory keyManagerFactory) {
+	public synchronized void setKeyManagerFactory(KeyManagerFactory keyManagerFactory) {
 		this.keyManagerFactory = keyManagerFactory;
 	}
 
@@ -364,7 +366,7 @@ public class SecureBaseObject extends BaseObject {
 	 * 
 	 * @param keyStorePassword
 	 */
-	public void setKeyStorePassword(String keyStorePassword) {
+	public synchronized void setKeyStorePassword(String keyStorePassword) {
 		this.keyStorePassword = keyStorePassword;
 		keyStore = null;
 		keyManagers = null;
@@ -445,7 +447,7 @@ public class SecureBaseObject extends BaseObject {
 	 * 
 	 * @param keyStore
 	 */
-	public void setKeyStoreFileName(String keyStore) {
+	public synchronized void setKeyStoreFileName(String keyStore) {
 		this.keyStoreFileName = keyStore;
 		this.keyStore = null;
 		keyManagers = null;
@@ -457,7 +459,7 @@ public class SecureBaseObject extends BaseObject {
 	 * 
 	 * @param keyStoreType
 	 */
-	public void setKeyStoreType(String keyStoreType) {
+	public synchronized void setKeyStoreType(String keyStoreType) {
 		this.keyStoreType = keyStoreType;
 		keyStore = null;
 		keyManagers = null;
@@ -468,7 +470,7 @@ public class SecureBaseObject extends BaseObject {
 	 * 
 	 * @param algorithm (Example SunX509)
 	 */
-	public void setAlgorithm(String algorithm) {
+	public synchronized void setAlgorithm(String algorithm) {
 		this.algorithm = algorithm;
 		keyManagerFactory = null;
 		keyManagers = null;
@@ -480,7 +482,7 @@ public class SecureBaseObject extends BaseObject {
 	 * 
 	 * @param protocol
 	 */
-	public void setProtocol(String protocol) {
+	public synchronized void setProtocol(String protocol) {
 		this.protocol = protocol;
 		// the context is based on the protocol so if it's already created we'll need to reset it.
 		resetSecurityContext();
@@ -498,7 +500,7 @@ public class SecureBaseObject extends BaseObject {
 	 * 
 	 * @param mgr
 	 */
-	public void setTrustManagers(TrustManager[] mgr) {
+	public synchronized void setTrustManagers(TrustManager[] mgr) {
 		trustManagers = mgr;
 		resetSecurityContext();
 	}

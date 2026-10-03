@@ -3,6 +3,7 @@ package us.bringardner.core.test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -15,6 +16,9 @@ import java.io.OutputStream;
 import java.security.KeyStore;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
@@ -216,5 +220,67 @@ public class TestSecureBaseObjectCoverage {
 		obj.setProtocol("NoSuchProtocol");
 		IOException e = assertThrows(IOException.class, obj::getSSLContext);
 		assertNotNull(e.getCause(), "The original error should be the cause");
+	}
+
+	static class TestError extends Error {
+		private static final long serialVersionUID = 1L;
+	}
+
+	@Test
+	public void testErrorIsNotWrapped() {
+		Secure obj = new Secure() {
+			@Override
+			public SecureRandom getSecureRandom() {
+				throw new TestError();
+			}
+		};
+		assertThrows(TestError.class, obj::getSSLContext, "An Error should not become an IOException");
+	}
+
+	/**
+	 * A setter called while getSSLContext() is building from the old settings must not leave
+	 * that stale context cached: the setter waits for the build and then clears it.
+	 */
+	@Test
+	public void testSetterDuringBuildIsNotLost() throws Exception {
+		CountDownLatch building = new CountDownLatch(1);
+		CountDownLatch release = new CountDownLatch(1);
+		Secure obj = new Secure() {
+			@Override
+			public SecureRandom getSecureRandom() {
+				building.countDown();
+				try {
+					release.await(10, TimeUnit.SECONDS);
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+				}
+				return null;
+			}
+		};
+		obj.setKeyStorePassword(null);
+		AtomicReference<SSLContext> built = new AtomicReference<>();
+		Thread getter = new Thread(() -> {
+			try {
+				built.set(obj.getSSLContext());
+			} catch (IOException e) {
+				throw new IllegalStateException(e);
+			}
+		});
+		getter.start();
+		assertTrue(building.await(10, TimeUnit.SECONDS));
+
+		Thread setter = new Thread(() -> obj.setTrustManagers(new TrustManager[] {new AcceptAll()}));
+		setter.start();
+		//  With the fix the setter waits for the getter's lock; give it time to get there
+		long end = System.currentTimeMillis()+2000;
+		while( setter.isAlive() && setter.getState() != Thread.State.BLOCKED && System.currentTimeMillis() < end ) {
+			Thread.sleep(10);
+		}
+		release.countDown();
+		getter.join(10000);
+		setter.join(10000);
+
+		assertNotNull(built.get());
+		assertNotSame(built.get(), obj.getSSLContext(), "The context built from the old settings should not be kept");
 	}
 }
