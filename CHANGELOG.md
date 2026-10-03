@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.3.0 (unreleased)
+
+### Added
+
+- `util.AddressMatcher`: lists of IP addresses and networks (CIDR) for allow lists, moved here from
+  bjl_dns so other projects can use it (bjl_email's relay networks do). Only address literals are
+  accepted, never a host name, so parsing never does a DNS lookup: IPv4 is parsed here, because
+  `InetAddress.getByName` looks an invalid literal such as `1.2.3.999` up as a host name. A prefix
+  length must fit the address (0-32, 0-128). Also `isAddressLiteral(String)` and `and(AddressMatcher)`.
+- `util.TlsSockets`: `layer()` puts TLS on a connected socket (STARTTLS, FTP's AUTH TLS),
+  `configureClient()` sets SNI and the HTTPS host name check on a client `SSLSocket`, and
+  `hostnameVerifying()` wraps a socket factory so its sockets check the host name. bjl_email,
+  bjl_net_framework and bjl_net_ftp each had their own version (bjl_net_ftp's had no host name check).
+- `util.TrustAllCertificates`: the one, clearly named, trust manager that accepts every certificate,
+  for opportunistic TLS and tests, with `trustManagers()` and `sslContext(protocol)`.
+- `SocketClient.startTls(Socket, String)`: TLS on a connected socket with the client's `SSLContext`
+  and host name check; the handshake is done and the socket closed if it fails.
+
 ## 1.2.0 (unreleased)
 
 ### Fixed
