@@ -39,6 +39,17 @@
   `debug()` call (the most common kind) takes about half the time on Java 21 and two thirds on Java 11.
 - `BjlLogger` writes a message and its stack trace to a log file in one write, instead of one write
   per line of the trace: logging an error with a stack trace takes about half the time.
+- `SearchableClassLoader.findTarget` loaded every class it looked at, and they stayed loaded. It now
+  reads the class file header (the class, super class and interfaces) and only loads classes that can
+  match. Searching the log4j jars (about 1400 classes) for implementations of `Runnable` loaded 1683
+  classes; it now loads 17 (115 to include indirect implementations). The results are the same.
+  A class found twice is no longer checked with a linear search of the results.
+- Looking up a property no longer takes a global lock: the properties file cache is a
+  `ConcurrentHashMap` instead of an `LruMap`. A lookup takes about a third of the time with one
+  thread, and much less than that when several threads look up properties at once.
+- `DEFAULT_MAX_PROPERTIES` is 1000 (was 200), so an application with a few hundred `BaseObject`
+  classes doesn't read the same properties files again and again. Over the limit, the files dropped
+  from the cache are no longer the least recently used ones.
 
 ### BjlLogger log files
 

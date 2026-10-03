@@ -5,11 +5,11 @@ package us.bringardner.core;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Iterator;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
-import us.bringardner.core.util.LruMap;
 
 
 /**
@@ -44,17 +44,22 @@ public class BaseObject {
 
 
 
-	//  Used to initialize the LruMap for properties.  Use setMaxProperties to change it at run time. 
-	public static final int DEFAULT_MAX_PROPERTIES = 200;
+	/**
+	 * The most properties files (one per class searched, found or not) kept in the cache, see 
+	 * {@link #setMaxProperties(int)}. It was 200, which an application with a few hundred BaseObject 
+	 * classes went past, so files were read again and again.
+	 */
+	public static final int DEFAULT_MAX_PROPERTIES = 1000;
 	public static final String PROPERTY_LOGGER = "ILogger";
 	/** Log4j is told this is a logging "wrapper" class, so it reports the code that called logError (etc.) as the caller. */
 	private static final String FQCN = BaseObject.class.getName();
 	private static volatile Class<?>   loggerClass = null;
 
-	//  The properties map is global so we use a LruMap to manage the memory footprint.
-	//  LruMap is an access-ordered LinkedHashMap (even get() modifies it) so EVERY access
-	//  must be guarded by the same lock.  We use the map itself as the lock.
-	private static final LruMap<String, Properties> properties = new LruMap<String, Properties>(DEFAULT_MAX_PROPERTIES);
+	//  The properties files read, by class name (an empty Properties when there is no file).
+	//  A ConcurrentHashMap, so looking up a property doesn't take a lock. It was an LruMap, and 
+	//  because even get() reorders an LRU map every lookup took the same global lock.
+	private static final ConcurrentHashMap<String, Properties> properties = new ConcurrentHashMap<>();
+	private static volatile int maxProperties = DEFAULT_MAX_PROPERTIES;
 
 	//  Loggers are shared by name (like log4j and java.util.logging) so we don't create
 	//  (and initialize) a new ILogger for every object instance.
@@ -63,11 +68,23 @@ public class BaseObject {
 	private volatile boolean supportPrefixProperty = true;
 
 	/**
-	 * @param maxSize for the LruMap used for properties.
+	 * @param maxSize the most properties files kept in the cache, 0 (or less) for no limit. 
+	 *  When there are more, some (not necessarily the least recently used) are dropped and read again when needed.
 	 */
 	public static void setMaxProperties(int maxSize) {
-		synchronized (properties) {
-			properties.setMaxSize(maxSize);
+		maxProperties = maxSize;
+		trimPropertyCache();
+	}
+
+	private static void trimPropertyCache() {
+		int max = maxProperties;
+		if( max <= 0 ) {
+			return;
+		}
+		Iterator<String> it = properties.keySet().iterator();
+		while( properties.size() > max && it.hasNext() ) {
+			it.next();
+			it.remove();
 		}
 	}
 
@@ -87,9 +104,7 @@ public class BaseObject {
 	 * the cache may be cleared to reduce the memory footprint.  
 	 */
 	public static void clearPropertyCache() {
-		synchronized (properties) {
-			properties.clear();
-		}
+		properties.clear();
 	}
 
 	/**
@@ -166,9 +181,7 @@ public class BaseObject {
 	 */
 	private Properties getPropertyEntry(Class<?> cls, String name) {
 		Properties ret;
-		synchronized (properties) {
-			ret = properties.get(name);
-		}
+		ret = properties.get(name);
 		if( ret == null ) {
 			//  Load outside the lock so a slow class path search does not block every other thread.
 			//  If two threads load the same file at the same time, the last one wins (the content is the same).
@@ -207,8 +220,9 @@ public class BaseObject {
 				e.printStackTrace(System.err);
 
 			} finally {
-				synchronized (properties) {
-					properties.put(name, ret);
+				properties.put(name, ret);
+				if( properties.size() > maxProperties && maxProperties > 0 ) {
+					trimPropertyCache();
 				}
 			}
 		}
@@ -274,9 +288,11 @@ public class BaseObject {
 		String ret = null;
 		
 		String prefix = getPropertyPrefix();
+		//  Built once, it is looked up in the system properties and in every class's properties file
+		String prefixed = prefix == null ? null : prefix+"."+propertyName;
 
-		if( prefix!=null ) {
-			ret = System.getProperty(prefix+"."+propertyName);
+		if( prefixed!=null ) {
+			ret = System.getProperty(prefixed);
 		}
 		
 		if( ret == null ) {
@@ -294,8 +310,8 @@ public class BaseObject {
 				}
 				Properties p = getPropertyEntry(cls, path);
 				if( p != null ) {
-					if( prefix!=null ) {
-						ret = p.getProperty(prefix+"."+propertyName);
+					if( prefixed!=null ) {
+						ret = p.getProperty(prefixed);
 					}
 					if(ret==null) {
 						ret = p.getProperty(propertyName);

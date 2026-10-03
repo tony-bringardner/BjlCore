@@ -72,7 +72,7 @@ public class Mailer extends BaseObject {
 | `us.bringardner.core.util` | `AbstractCoreServer` | Base class for a TCP or SSL server. |
 | | `SocketClient` | Creates configured plain or SSL client sockets. |
 | | `LruMap` | A `LinkedHashMap` that drops the least recently used entry at a size limit. |
-| | `SearchableClassLoader` | Finds the direct (or all) sub classes / implementations of a type in jars and folders. |
+| | `SearchableClassLoader` | Finds the direct (or all) sub classes / implementations of a type in jars and folders. Only the matching classes are loaded. |
 | | `ThreadSafeDateFormat` | A synchronized `SimpleDateFormat`. |
 | | `LogHelper` | Logging for code that can't extend `BaseObject`. |
 | `us.bringardner.core.swing` | `DatePanel`, `DayPanel`, `TimePanel`, `Clock` | Date and time picker panels. |
@@ -97,8 +97,9 @@ and a sub class inherits its parents' properties files.
   An invalid number prints a warning to `System.err` and returns the default. Only `true` (in any case) is true.
 - `setSupportPrefixProperty(false)` turns off the `<class name>.` lookups for one object.
   `setPropertyPrefix(...)` (protected) uses a different prefix.
-- Properties files are cached (up to 200 by default). Use `BaseObject.setMaxProperties(n)`
-  to change the limit, and `BaseObject.clearPropertyCache()` to re-read them.
+- Properties files are cached (up to 1000 by default, one per class searched). Use
+  `BaseObject.setMaxProperties(n)` to change the limit (0 for none), and
+  `BaseObject.clearPropertyCache()` to re-read them.
 
 ## Logging
 

@@ -15,8 +15,12 @@
  */
 package us.bringardner.core.util;
 
+import java.io.BufferedInputStream;
+import java.io.DataInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -24,18 +28,24 @@ import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 /**
- * A URLClassLoader that can search its URLs (directories, jar and zip files) for classes 
+ * A URLClassLoader that can search its URLs (directories, jar and zip files) for classes
  * that extend or implement a target class.
- * 
- * Note: every class that is examined is loaded (but not initialized) by this loader.
+ *
+ * Only the classes that match are loaded (but not initialized). The others are ruled out by
+ * reading the names in their class file header (the class, its super class and interfaces),
+ * so searching a large class path doesn't load, and keep in memory, every class on it.
  * Call close() when the loader is no longer needed to release open jar files.
  */
-public class SearchableClassLoader extends URLClassLoader {	
+public class SearchableClassLoader extends URLClassLoader {
 
 	public static SearchableClassLoader getClassPathLoader() {
 		return SearchableClassLoader.getLoader(Arrays.asList(System.getProperty("java.class.path").split(File.pathSeparator)));
@@ -52,7 +62,7 @@ public class SearchableClassLoader extends URLClassLoader {
 				try {
 					loader.addUrl(file.toURI().toURL());
 				} catch (MalformedURLException e) {
-				}	
+				}
 			}
 		}
 
@@ -65,26 +75,27 @@ public class SearchableClassLoader extends URLClassLoader {
 	}
 
 	/**
-	 * Find classes that are the target, directly extend the target or directly implement the target (if it's an interface).
-	 * 
+	 * Find classes that extend or implement the target directly (cls.getSuperclass() == target or
+	 * target is one of cls.getInterfaces()), or are the target itself.
+	 *
 	 * @param target
-	 * @return the list of matching classes 
+	 * @return a list of classes found in this loader's URLs
 	 */
 	public List<Class<?>> findTarget(Class<?> target) {
 		return findTarget(target, false);
 	}
 
 	/**
-	 * Find classes that are the target or extend / implement the target.
-	 * 
+	 * Find classes that extend or implement the target.
+	 *
 	 * @param target
-	 * @param includeIndirect if true, include classes that extend or implement the target indirectly 
-	 * (for example a subclass of a subclass). If false, only direct subclasses / implementations are included.
-	 * @return the list of matching classes 
+	 * @param includeIndirect if true, also return classes that extend or implement the target through
+	 *  other classes (any class assignable to target), otherwise only direct sub classes / implementations.
+	 * @return a list of classes found in this loader's URLs, in the order they were found
 	 */
 	public List<Class<?>> findTarget(Class<?> target, boolean includeIndirect) {
 
-		List<Class<?>> ret = new ArrayList<>();
+		Search search = new Search(target, includeIndirect);
 		URL[] urls = getURLs();
 		if( urls != null ) {
 			for (URL url : urls) {
@@ -94,11 +105,11 @@ public class SearchableClassLoader extends URLClassLoader {
 						File file = toFile(url);
 						String path = file.getPath();
 						if( file.isDirectory()) {
-							proccessDir(file,file,ret,target,includeIndirect);
+							proccessDir(file,file,search);
 						} else if(path.endsWith(".class")) {
-							parseFile(null,file,ret,target,includeIndirect);
+							parseFile(null,file,search);
 						} else if(path.endsWith(".jar") || path.endsWith(".zip")) {
-							parseJar(file,ret,target,includeIndirect);	
+							parseJar(file,search);
 						}
 					}
 				} catch (IOException | RuntimeException e) {
@@ -107,11 +118,165 @@ public class SearchableClassLoader extends URLClassLoader {
 			}
 		}
 
-		return ret;
+		return new ArrayList<>(search.found);
+	}
+
+	/** The state of one findTarget call */
+	private final class Search {
+		final Class<?> target;
+		final String targetName;
+		final boolean includeIndirect;
+		//  A set, so a class found twice (in a directory and a jar, say) is only listed once
+		final Set<Class<?>> found = new LinkedHashSet<>();
+		//  For includeIndirect: class name -> could it be a sub type of target
+		final Map<String, Boolean> mayExtend = new HashMap<>();
+
+		Search(Class<?> target, boolean includeIndirect) {
+			this.target = target;
+			this.targetName = target.getName();
+			this.includeIndirect = includeIndirect;
+		}
+
+		/**
+		 * @return false only if the class can't match. True if it may, it is then loaded to make sure.
+		 */
+		boolean mayMatch(ClassHeader header) {
+			if( header.name.equals(targetName) ) {
+				return true;
+			}
+			if( !includeIndirect ) {
+				if( targetName.equals(header.superName) ) {
+					return true;
+				}
+				for (String in : header.interfaces) {
+					if( in.equals(targetName) ) {
+						return true;
+					}
+				}
+				return false;
+			}
+			return mayExtend(header, new java.util.HashSet<>());
+		}
+
+		private boolean mayExtend(ClassHeader header, Set<String> visiting) {
+			Boolean ret = mayExtend.get(header.name);
+			if( ret != null ) {
+				return ret;
+			}
+			if( !visiting.add(header.name) ) {
+				// a cycle (only in broken class files)
+				return true;
+			}
+			boolean may = header.name.equals(targetName)
+					|| supertypeMayExtend(header.superName, visiting);
+			for(int i=0; !may && i < header.interfaces.length; i++ ) {
+				may = supertypeMayExtend(header.interfaces[i], visiting);
+			}
+			mayExtend.put(header.name, may);
+			return may;
+		}
+
+		private boolean supertypeMayExtend(String name, Set<String> visiting) {
+			if( name == null ) {
+				// java.lang.Object (or a module-info)
+				return false;
+			}
+			if( name.equals(targetName) ) {
+				return true;
+			}
+			Boolean known = mayExtend.get(name);
+			if( known != null ) {
+				return known;
+			}
+			//  Read the super type's header the same way the class would be loaded (this loader, then its parents)
+			ClassHeader header = null;
+			try (InputStream in = getResourceAsStream(name.replace('.', '/')+".class")) {
+				if( in != null ) {
+					header = ClassHeader.read(in);
+				}
+			} catch (IOException | RuntimeException e) {
+				header = null;
+			}
+			if( header == null ) {
+				// Can't tell without loading it, so let the real check decide
+				return true;
+			}
+			return mayExtend(header, visiting);
+		}
+	}
+
+	/**
+	 * The names in a class file header. Only the start of the file is read.
+	 */
+	static final class ClassHeader {
+		final String name;
+		/** null for java.lang.Object and module-info */
+		final String superName;
+		final String[] interfaces;
+
+		private ClassHeader(String name, String superName, String[] interfaces) {
+			this.name = name;
+			this.superName = superName;
+			this.interfaces = interfaces;
+		}
+
+		/**
+		 * @param in a class file
+		 * @return its header, or null if it is not a class file this method understands
+		 */
+		static ClassHeader read(InputStream in) throws IOException {
+			DataInputStream data = new DataInputStream(new BufferedInputStream(in, 4096));
+			if( data.readInt() != 0xCAFEBABE ) {
+				return null;
+			}
+			data.readUnsignedShort(); // minor version
+			data.readUnsignedShort(); // major version
+			int count = data.readUnsignedShort();
+			String[] utf8 = new String[count];
+			int[] classNameIndex = new int[count];
+			for(int i=1; i < count; i++ ) {
+				int tag = data.readUnsignedByte();
+				switch (tag) {
+				case 1: utf8[i] = data.readUTF(); break;                        // Utf8
+				case 7: classNameIndex[i] = data.readUnsignedShort(); break;    // Class
+				case 8: case 16: case 19: case 20: data.skipBytes(2); break;    // String, MethodType, Module, Package
+				case 15: data.skipBytes(3); break;                              // MethodHandle
+				case 3: case 4: case 9: case 10: case 11: case 12: case 17: case 18: data.skipBytes(4); break;
+				case 5: case 6: data.skipBytes(8); i++; break;                  // Long and Double take two entries
+				default: return null;                                           // a newer class file format
+				}
+			}
+			data.readUnsignedShort(); // access flags
+			String name = className(data.readUnsignedShort(), utf8, classNameIndex);
+			if( name == null ) {
+				return null;
+			}
+			int superIndex = data.readUnsignedShort();
+			String superName = superIndex == 0 ? null : className(superIndex, utf8, classNameIndex);
+			String[] interfaces = new String[data.readUnsignedShort()];
+			for(int i=0; i < interfaces.length; i++ ) {
+				interfaces[i] = className(data.readUnsignedShort(), utf8, classNameIndex);
+				if( interfaces[i] == null ) {
+					return null;
+				}
+			}
+			return new ClassHeader(name, superName, interfaces);
+		}
+
+		private static String className(int index, String[] utf8, int[] classNameIndex) {
+			if( index <= 0 || index >= classNameIndex.length ) {
+				return null;
+			}
+			int nameIndex = classNameIndex[index];
+			if( nameIndex <= 0 || nameIndex >= utf8.length || utf8[nameIndex] == null ) {
+				return null;
+			}
+			return utf8[nameIndex].replace('/', '.');
+		}
 	}
 
 	/*
-	 * URL.getPath() is URL encoded (a space is %20), so convert through a URI. 
+	 * Convert a file URL to a File, handling escaped characters such as spaces (%20).
 	 */
 	private static File toFile(URL url) {
 		try {
@@ -122,11 +287,11 @@ public class SearchableClassLoader extends URLClassLoader {
 	}
 
 	/**
-	 * Find a class by trying each sub path (from the end) as a class name.
-	 * This is used when the file is not under a class path root. 
-	 * 
-	 * @param path of a class file without the .class extension
-	 * @return the Class or null
+	 * Find the class for a file when we don't know the root of the class path.
+	 * Try the last element of the path, then the last two ... until one of them loads.
+	 *
+	 * @param path of a class file, without the .class extension
+	 * @return the class or null if it could not be loaded
 	 */
 	Class<?> findFromPath(String path) {
 		Class<?> ret = null;
@@ -153,7 +318,7 @@ public class SearchableClassLoader extends URLClassLoader {
 	}
 
 	/*
-	 * Load a class without initializing it. Returns null if it can't be loaded.
+	 * Load a class without failing on classes that can't be linked (missing dependencies).
 	 */
 	private Class<?> tryLoad(String name) {
 		try {
@@ -164,10 +329,31 @@ public class SearchableClassLoader extends URLClassLoader {
 		}
 	}
 
-	private void parseFile(File root, File file, List<Class<?>> ret, Class<?> target, boolean includeIndirect) {
+	private static ClassHeader readHeader(File file) {
+		try (InputStream in = new FileInputStream(file)) {
+			return ClassHeader.read(in);
+		} catch (IOException | RuntimeException e) {
+			return null;
+		}
+	}
+
+	private void parseFile(File root, File file, Search search) {
 		String path = file.getAbsolutePath();
 		if( !path.endsWith(".class")) {
-			return;	
+			return;
+		}
+
+		ClassHeader header = readHeader(file);
+		if( header != null ) {
+			if( !search.mayMatch(header) ) {
+				return;
+			}
+			//  The header has the class name, so we don't have to work it out from the path
+			Class<?> cls = tryLoad(header.name);
+			if( cls != null ) {
+				checkClass(cls,search);
+				return;
+			}
 		}
 
 		String name = path.substring(0, path.length()-6);
@@ -184,20 +370,16 @@ public class SearchableClassLoader extends URLClassLoader {
 			//  The directory may not be a class path root, so try each sub path.
 			cls = findFromPath(name);
 		}
-		checkClass(cls,ret,target,includeIndirect);
+		checkClass(cls,search);
 	}
 
-	private void checkClass(String name, List<Class<?>> ret,Class<?> target, boolean includeIndirect) {
-		checkClass(tryLoad(name), ret, target, includeIndirect);
-	}
-
-	private void checkClass(Class<?> cls, List<Class<?>> ret,Class<?> target, boolean includeIndirect) {
+	private void checkClass(Class<?> cls, Search search) {
 		if( cls == null ) {
 			return;
 		}
 		try {
-			if( matches(cls, target, includeIndirect) && !ret.contains(cls)) {
-				ret.add(cls);
+			if( matches(cls, search.target, search.includeIndirect) ) {
+				search.found.add(cls);
 			}
 		} catch (LinkageError | RuntimeException e) {
 			// The class could not be resolved (missing dependencies)
@@ -224,7 +406,7 @@ public class SearchableClassLoader extends URLClassLoader {
 		return false;
 	}
 
-	private void proccessDir(File root, File dir, List<Class<?>> ret, Class<?> target, boolean includeIndirect) {
+	private void proccessDir(File root, File dir, Search search) {
 		File[] kids = dir.listFiles();
 		if( kids != null) {
 			//  sort so the results are the same on every platform / file system
@@ -232,21 +414,21 @@ public class SearchableClassLoader extends URLClassLoader {
 			for(File file: kids) {
 				String path = file.getPath();
 				if( file.isDirectory()) {
-					proccessDir(root,file,ret,target,includeIndirect);
+					proccessDir(root,file,search);
 				} else if(path.endsWith(".class")) {
-					parseFile(root,file,ret,target,includeIndirect);
+					parseFile(root,file,search);
 				} else if(path.endsWith(".jar") || path.endsWith(".zip")) {
 					try {
-						parseJar(file,ret,target,includeIndirect);
+						parseJar(file,search);
 					} catch (IOException e) {
-					}	
-				}			
+					}
+				}
 			}
 		}
 
 	}
 
-	private void parseJar(File jar, List<Class<?>> ret,Class<?> target, boolean includeIndirect) throws IOException {
+	private void parseJar(File jar, Search search) throws IOException {
 		try(ZipFile file = new ZipFile(jar)) {
 			Enumeration<? extends ZipEntry> i = file.entries();
 			while( i.hasMoreElements()) {
@@ -254,7 +436,16 @@ public class SearchableClassLoader extends URLClassLoader {
 				String entryName = ze.getName();
 				if( entryName.endsWith(".class") && !entryName.endsWith("module-info.class") && !entryName.startsWith("META-INF/")) {
 					String name = entryName.substring(0, entryName.length()-6).replace('/', '.');
-					checkClass(name,ret,target,includeIndirect);
+					ClassHeader header;
+					try (InputStream in = file.getInputStream(ze)) {
+						header = ClassHeader.read(in);
+					} catch (IOException | RuntimeException e) {
+						header = null;
+					}
+					if( header != null && !search.mayMatch(header) ) {
+						continue;
+					}
+					checkClass(tryLoad(name),search);
 				}
 			}
 		}
