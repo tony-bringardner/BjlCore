@@ -279,6 +279,7 @@ public class TimePanel extends JPanel implements ComponentId {
 		add(analogPanel, BorderLayout.CENTER);
 		analogPanel.setLayout(new FlowLayout(FlowLayout.CENTER, 5, 5));		
 		clock = new Clock(date);
+		clock.setName("clock");
 		clock.setShowText(false);
 		clock.setMinuteColor(Color.BLACK);
 		clock.setHourColor(Color.BLACK);
@@ -315,6 +316,7 @@ public class TimePanel extends JPanel implements ComponentId {
 		controlPanel.add(amPmPanel);
 
 		militaryTimeCheckbox = new JCheckBox("24 Hr");
+		militaryTimeCheckbox.setName("militaryTimeCheckbox");
 		amPmPanel.add(militaryTimeCheckbox);
 		militaryTimeCheckbox.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
@@ -325,11 +327,13 @@ public class TimePanel extends JPanel implements ComponentId {
 		militaryTimeCheckbox.setAlignmentX(Component.RIGHT_ALIGNMENT);
 
 		amRadio = new JRadioButton("AM");
+		amRadio.setName("amRadio");
 		amPmPanel.add(amRadio);
 		amPmGroup.add(amRadio);
 		amRadio.setSelected(true);
 
 		pmRadio = new JRadioButton("PM");
+		pmRadio.setName("pmRadio");
 		amPmPanel.add(pmRadio);
 		amPmGroup.add(pmRadio);
 
@@ -337,6 +341,7 @@ public class TimePanel extends JPanel implements ComponentId {
 		controlPanel.add(spinnerPanel);
 
 		hourSpinner = new JSpinner();
+		hourSpinner.setName("hourSpinner");
 		spinnerPanel.add(hourSpinner);
 		hourSpinner.addChangeListener(new ChangeListener() {
 			public void stateChanged(ChangeEvent e) {
@@ -349,6 +354,7 @@ public class TimePanel extends JPanel implements ComponentId {
 		spinnerPanel.add(lblNewLabel);
 
 		minuteSpinner = new JSpinner();
+		minuteSpinner.setName("minuteSpinner");
 		spinnerPanel.add(minuteSpinner);
 		minuteSpinner.addChangeListener(new ChangeListener() {
 			public void stateChanged(ChangeEvent e) {
@@ -383,6 +389,7 @@ public class TimePanel extends JPanel implements ComponentId {
 		controlPanel.add(nowPanel);
 
 		btnCurrentTime = new JButton("Set Current TIme");
+		btnCurrentTime.setName("btnCurrentTime");
 		nowPanel.add(btnCurrentTime);
 		btnCurrentTime.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {

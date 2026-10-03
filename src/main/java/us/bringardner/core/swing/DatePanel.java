@@ -78,6 +78,7 @@ public class DatePanel extends javax.swing.JPanel implements ComponentId {
 		cal.setTime(date);
 		centerPanel.remove(dayPanel1);
 		dayPanel1 = new DayPanel(date);
+		dayPanel1.setName("dayPanel1");
 		dayPanel1.addPropertyChangeListener(DayPanel.PROP_DAY,
 				new PropertyChangeListener() {
 
@@ -112,11 +113,15 @@ public class DatePanel extends javax.swing.JPanel implements ComponentId {
 
 		northPanel = new javax.swing.JPanel();
 		monthCombo = new javax.swing.JComboBox<String>();
+		monthCombo.setName("monthCombo");
 		yearSpinner = new javax.swing.JSpinner();
+		yearSpinner.setName("yearSpinner");
 		centerPanel = new javax.swing.JPanel();
 		dayPanel1 = new us.bringardner.core.swing.DayPanel();
+		dayPanel1.setName("dayPanel1");
 		southPanel = new javax.swing.JPanel();
 		todayButton = new javax.swing.JButton();
+		todayButton.setName("todayButton");
 
 		setBorder(javax.swing.BorderFactory.createTitledBorder("Date"));
 		setLayout(new java.awt.BorderLayout());

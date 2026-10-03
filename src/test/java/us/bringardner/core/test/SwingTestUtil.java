@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.swing.AbstractButton;
+import javax.swing.JTextField;
 import javax.swing.Timer;
 
 import org.junit.jupiter.api.Assumptions;
@@ -25,7 +26,10 @@ public class SwingTestUtil {
 		Assumptions.assumeFalse(GraphicsEnvironment.isHeadless(), "Requires a display (java.awt.headless=true)");
 	}
 
-	/** Read a private field (searching super classes). */
+	/**
+	 * Read a private field (searching super classes). Only for state that isn't a component,
+	 * such as the Clock's drag handles; find components with {@link #named}.
+	 */
 	@SuppressWarnings("unchecked")
 	public static <T> T field(Object target, String name) {
 		for(Class<?> cls = target.getClass(); cls != null; cls = cls.getSuperclass()) {
@@ -54,6 +58,35 @@ public class SwingTestUtil {
 			}
 		}
 		return ret;
+	}
+
+	/**
+	 * Find a component by its name (see {@link Component#setName(String)}).
+	 *
+	 * @throws IllegalArgumentException if there is no such component, or it isn't of the given type
+	 */
+	public static <T extends Component> T named(Container root, String name, Class<T> type) {
+		for(Component c : find(root, Component.class)) {
+			if( name.equals(c.getName())) {
+				if( !type.isInstance(c)) {
+					throw new IllegalArgumentException("'"+name+"' is a "+c.getClass().getName()+", not a "+type.getName());
+				}
+				return type.cast(c);
+			}
+		}
+		throw new IllegalArgumentException("No component named '"+name+"' in "+root.getClass().getName());
+	}
+
+	/** The day of the month fields of a DayPanel (named day1, day2 ...), in order. */
+	public static List<JTextField> days(Container dayPanel) {
+		List<JTextField> ret = new ArrayList<>();
+		for(int day=1; ; day++ ) {
+			try {
+				ret.add(named(dayPanel, "day"+day, JTextField.class));
+			} catch (IllegalArgumentException e) {
+				return ret;
+			}
+		}
 	}
 
 	/** Find a button by its text. */

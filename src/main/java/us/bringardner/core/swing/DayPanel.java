@@ -129,6 +129,8 @@ public class DayPanel extends JPanel implements ComponentId {
 			}
 			
 			JTextField textField = new JTextField(tmp);
+			//  Named so tests (and tools) can find a day without reaching into this class
+			textField.setName("day"+day1);
 			days.add(textField);
 			config(textField);
 			textField.setBorder(null);

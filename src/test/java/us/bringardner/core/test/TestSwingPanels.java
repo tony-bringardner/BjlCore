@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static us.bringardner.core.test.SwingTestUtil.field;
+import static us.bringardner.core.test.SwingTestUtil.named;
 
 import java.awt.Color;
 import java.awt.event.MouseEvent;
@@ -25,6 +25,7 @@ import javax.swing.border.LineBorder;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import us.bringardner.core.swing.Clock;
 import us.bringardner.core.swing.ComponentId;
@@ -36,6 +37,7 @@ import us.bringardner.core.swing.TimePanel;
 /**
  * Tests for the Swing panels that do not need a display (they also run with java.awt.headless=true).
  */
+@ExtendWith(RunOnEdt.class)
 public class TestSwingPanels {
 
 	private boolean military;
@@ -125,9 +127,9 @@ public class TestSwingPanels {
 	@Test
 	public void testTimePanelTwelveHour() {
 		TimePanel panel = new TimePanel(date(2020, Calendar.JANUARY, 1, 14, 25, 36, 789).getTime());
-		JSpinner hour = field(panel, "hourSpinner");
-		JRadioButton pm = field(panel, "pmRadio");
-		JRadioButton am = field(panel, "amRadio");
+		JSpinner hour = named(panel, "hourSpinner", JSpinner.class);
+		JRadioButton pm = named(panel, "pmRadio", JRadioButton.class);
+		JRadioButton am = named(panel, "amRadio", JRadioButton.class);
 
 		assertEquals(2, intValue(hour));
 		assertTrue(pm.isSelected());
@@ -156,9 +158,9 @@ public class TestSwingPanels {
 		TimePanel.setMilitary(true);
 		assertTrue(TimePanel.isMilitary());
 		TimePanel panel = new TimePanel(date(2020, Calendar.JANUARY, 1, 9, 5, 0, 0).getTime());
-		JSpinner hour = field(panel, "hourSpinner");
-		JCheckBox box = field(panel, "militaryTimeCheckbox");
-		JRadioButton pm = field(panel, "pmRadio");
+		JSpinner hour = named(panel, "hourSpinner", JSpinner.class);
+		JCheckBox box = named(panel, "militaryTimeCheckbox", JCheckBox.class);
+		JRadioButton pm = named(panel, "pmRadio", JRadioButton.class);
 		assertTrue(box.isSelected());
 		assertFalse(pm.isVisible(), "AM/PM is hidden in 24 hour mode");
 
@@ -173,8 +175,8 @@ public class TestSwingPanels {
 	@Test
 	public void testTimePanelToggleMilitaryKeepsTheHour() {
 		TimePanel panel = new TimePanel(date(2020, Calendar.JANUARY, 1, 14, 0, 0, 0).getTime());
-		JSpinner hour = field(panel, "hourSpinner");
-		JCheckBox box = field(panel, "militaryTimeCheckbox");
+		JSpinner hour = named(panel, "hourSpinner", JSpinner.class);
+		JCheckBox box = named(panel, "militaryTimeCheckbox", JCheckBox.class);
 
 		box.doClick();
 		assertTrue(TimePanel.isMilitary());
@@ -248,7 +250,7 @@ public class TestSwingPanels {
 	public void testTimePanelNowButton() {
 		TimePanel panel = new TimePanel(date(2000, Calendar.JANUARY, 1, 0, 0, 0, 0).getTime());
 		Calendar before = Calendar.getInstance();
-		((JButton) field(panel, "btnCurrentTime")).doClick();
+		named(panel, "btnCurrentTime", JButton.class).doClick();
 		Calendar after = Calendar.getInstance();
 		int hour = panel.getHour();
 		assertTrue(hour == before.get(Calendar.HOUR_OF_DAY) || hour == after.get(Calendar.HOUR_OF_DAY));
@@ -259,9 +261,9 @@ public class TestSwingPanels {
 	@Test
 	public void testTimePanelSpinnersAndClockStayInSync() {
 		TimePanel panel = new TimePanel(date(2020, Calendar.JANUARY, 1, 10, 30, 0, 0).getTime());
-		Clock clock = field(panel, "clock");
-		JSpinner hour = field(panel, "hourSpinner");
-		JSpinner minute = field(panel, "minuteSpinner");
+		Clock clock = named(panel, "clock", Clock.class);
+		JSpinner hour = named(panel, "hourSpinner", JSpinner.class);
+		JSpinner minute = named(panel, "minuteSpinner", JSpinner.class);
 		List<PropertyChangeEvent> events = new ArrayList<>();
 		panel.addPropertyChangeListener(e -> {
 			if( "".equals(e.getPropertyName())) {
@@ -294,7 +296,7 @@ public class TestSwingPanels {
 	// ---------------- DayPanel / DatePanel ----------------
 
 	private static List<JTextField> days(DayPanel panel) {
-		return field(panel, "days");
+		return SwingTestUtil.days(panel);
 	}
 
 	/** Deliver a mouse event to the DayPanel listener of a day field. */
@@ -347,7 +349,7 @@ public class TestSwingPanels {
 		List<PropertyChangeEvent> events = new ArrayList<>();
 		panel.addPropertyChangeListener(DatePanel.PROP_DATE_CHANGED, events::add);
 
-		DayPanel dayPanel = field(panel, "dayPanel1");
+		DayPanel dayPanel = named(panel, "dayPanel1", DayPanel.class);
 		mouse(days(dayPanel).get(19), MouseEvent.MOUSE_CLICKED);
 
 		assertEquals(1, events.size());
@@ -364,7 +366,7 @@ public class TestSwingPanels {
 	public void testDatePanelTodayButton() {
 		DatePanel panel = new DatePanel();
 		panel.setDate(date(1999, Calendar.DECEMBER, 31, 0, 0, 0, 0));
-		((JButton) field(panel, "todayButton")).doClick();
+		named(panel, "todayButton", JButton.class).doClick();
 		Calendar today = Calendar.getInstance();
 		Calendar cal = Calendar.getInstance();
 		cal.setTime(panel.getDate());

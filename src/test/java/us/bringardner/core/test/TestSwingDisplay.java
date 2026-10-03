@@ -22,11 +22,11 @@ import java.util.Date;
 import java.util.List;
 
 import javax.swing.JFrame;
-import javax.swing.SwingUtilities;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import us.bringardner.core.swing.Clock;
 import us.bringardner.core.swing.DateAndTimeDialog;
@@ -40,6 +40,7 @@ import us.bringardner.core.swing.TimePanel;
  * modal dialogs (which are closed automatically by clicking their buttons).
  * They are skipped when java.awt.headless=true.
  */
+@ExtendWith(RunOnEdt.class)
 public class TestSwingDisplay {
 
 	private final List<JFrame> frames = new ArrayList<>();
@@ -332,11 +333,9 @@ public class TestSwingDisplay {
 		frames.add(frame);
 		frame.add(combo);
 		frame.pack();
-		SwingUtilities.invokeAndWait(() -> frame.setVisible(true));
-		long end = System.currentTimeMillis() + 5000;
-		while(!combo.isShowing() && System.currentTimeMillis() < end) {
-			Thread.sleep(20);
-		}
+		//  Already on the event thread (RunOnEdt), so the frame is showing when this returns
+		frame.setVisible(true);
+		assertTrue(combo.isShowing());
 
 		//  OK keeps the date and time that were in the combo
 		clickWhenShowing(DateAndTimeDialog.class, "OK");

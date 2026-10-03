@@ -23,6 +23,7 @@ import javax.swing.JLabel;
 import javax.swing.JTextField;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import us.bringardner.core.swing.Clock;
 import us.bringardner.core.swing.DayPanel;
@@ -31,6 +32,7 @@ import us.bringardner.core.swing.DayPanel;
  * DayPanel in locales where the week starts on Monday, and Clock painting without a display,
  * at zero size and at 2x (Retina) scale. None of these need a display.
  */
+@ExtendWith(RunOnEdt.class)
 public class TestSwingFixes {
 
 	// ---------------- DayPanel ----------------
@@ -62,7 +64,7 @@ public class TestSwingFixes {
 	}
 
 	private static List<JTextField> days(DayPanel panel) {
-		return SwingTestUtil.field(panel, "days");
+		return SwingTestUtil.days(panel);
 	}
 
 	private static String text(Component c) {
