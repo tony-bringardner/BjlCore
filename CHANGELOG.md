@@ -18,7 +18,7 @@
 - `SocketClient.startTls(Socket, String)`: TLS on a connected socket with the client's `SSLContext`
   and host name check; the handshake is done and the socket closed if it fails.
 
-## 1.2.0 (unreleased)
+## 1.2.0
 
 ### Fixed
 
