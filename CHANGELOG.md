@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.3.1 (unreleased)
+
+### Fixed
+
+- `SecureBaseObject.getSSLContext()` could return null when a setter (`setTrustManagers`, say) ran while
+  the context was being built: the setter waited for the build, then cleared the cached context before the
+  getter returned it. `getKeyManagers()`, `getKeyManagerFactory()`, `getKeyStore()`,
+  `SocketClient.getSocketFactory()` and `AbstractCoreServer.getServerSocketFactory()` had the same race.
+  They now return the value they built or found. `testSetterDuringBuildIsNotLost` failed about half the
+  time because of this.
+- `SecureBaseObject.getKeyManagers()` left the key store password in a `char[]` that was never cleared.
+  It is now cleared once the key store is loaded and the key managers are made, or loading fails.
+- When `KeyStorePassword` or `KeyStoreName` wasn't set, every call to `getKeyStorePassword()` or
+  `getKeyStoreFileName()` looked the property up again (taking the object's lock) and logged it again
+  at debug level. Each is now looked up once.
+
+### Changed (may need a code change)
+
+- A `KeyStorePassword` or `KeyStoreName` property that wasn't set when it was first needed is not looked
+  for again, so setting it later (as a system property, say) has no effect on that object. Call
+  `setKeyStorePassword` / `setKeyStoreFileName`; setting null looks the property up again.
+
 ## 1.3.0 (unreleased)
 
 ### Added

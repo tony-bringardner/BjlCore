@@ -283,4 +283,103 @@ public class TestSecureBaseObjectCoverage {
 		assertNotNull(built.get());
 		assertNotSame(built.get(), obj.getSSLContext(), "The context built from the old settings should not be kept");
 	}
+
+	/** Counts the lookups of one property and keeps the char[] passed to getKeyStore. */
+	static class Counting extends SecureBaseObject {
+		final java.util.concurrent.atomic.AtomicInteger lookups = new java.util.concurrent.atomic.AtomicInteger();
+		final String counted;
+		volatile char[] passphrase;
+
+		Counting(String counted) {
+			this.counted = counted;
+		}
+
+		@Override
+		public String getProperty(String propertyName, String defaultValue) {
+			if( propertyName.equals(counted) ) {
+				lookups.incrementAndGet();
+			}
+			return super.getProperty(propertyName, defaultValue);
+		}
+
+		@Override
+		public KeyStore getKeyStore(char[] passphrase) throws IOException {
+			this.passphrase = passphrase;
+			return super.getKeyStore(passphrase);
+		}
+	}
+
+	@Test
+	public void testUnsetPasswordIsLookedUpOnce() {
+		Counting obj = new Counting(SecureBaseObject.PROPERTY_PASS_PHRASE);
+		for (int i = 0; i < 5; i++) {
+			assertNull(obj.getKeyStorePassword());
+		}
+		assertEquals(1, obj.lookups.get(), "A password that isn't set should be looked up once");
+
+		//  Setting null means "use the property" again, as before
+		obj.setKeyStorePassword(null);
+		assertNull(obj.getKeyStorePassword());
+		assertEquals(2, obj.lookups.get());
+
+		obj.setKeyStorePassword(PASSWORD);
+		assertEquals(PASSWORD, obj.getKeyStorePassword());
+		assertEquals(2, obj.lookups.get(), "A password that was set is not looked up");
+	}
+
+	@Test
+	public void testUnsetKeyStoreNameIsLookedUpOnce() {
+		Counting obj = new Counting(SecureBaseObject.PROPERTY_KEY_STORE_NAME);
+		for (int i = 0; i < 5; i++) {
+			assertNull(obj.getKeyStoreFileName());
+		}
+		assertEquals(1, obj.lookups.get(), "A key store name that isn't set should be looked up once");
+		obj.setKeyStoreFileName(null);
+		assertNull(obj.getKeyStoreFileName());
+		assertEquals(2, obj.lookups.get());
+	}
+
+	@Test
+	public void testPasswordFromPropertyIsStillRead() {
+		String key = Counting.class.getName()+"."+SecureBaseObject.PROPERTY_PASS_PHRASE;
+		System.setProperty(key, PASSWORD);
+		try {
+			Counting obj = new Counting(SecureBaseObject.PROPERTY_PASS_PHRASE);
+			assertEquals(PASSWORD, obj.getKeyStorePassword());
+			assertEquals(PASSWORD, obj.getKeyStorePassword());
+			assertEquals(1, obj.lookups.get());
+		} finally {
+			System.clearProperty(key);
+		}
+	}
+
+	@Test
+	public void testPasswordCharsAreClearedAfterUse() throws Exception {
+		File file = createEmptyKeyStore(PASSWORD);
+		Counting obj = new Counting("none");
+		obj.setKeyStoreType("PKCS12");
+		obj.setKeyStoreFileName(file.getAbsolutePath());
+		obj.setKeyStorePassword(PASSWORD);
+		assertNotNull(obj.getKeyManagers());
+		char[] used = obj.passphrase;
+		assertNotNull(used);
+		for (char c : used) {
+			assertEquals('\0', c, "The password chars should be cleared once the key managers are made");
+		}
+		//  Still usable: the context is built from the key managers already made
+		assertNotNull(obj.getSSLContext());
+	}
+
+	@Test
+	public void testPasswordCharsAreClearedWhenLoadingFails() throws Exception {
+		File file = createEmptyKeyStore(PASSWORD);
+		Counting obj = new Counting("none");
+		obj.setKeyStoreType("PKCS12");
+		obj.setKeyStoreFileName(file.getAbsolutePath());
+		obj.setKeyStorePassword("wrong password");
+		assertThrows(IOException.class, () -> obj.getKeyManagers());
+		for (char c : obj.passphrase) {
+			assertEquals('\0', c);
+		}
+	}
 }

@@ -99,6 +99,10 @@ public class SecureBaseObject extends BaseObject {
 	private volatile String protocol;
 
 	private volatile String keyStorePassword;
+	//  true once the KeyStorePassword / KeyStoreName properties have been looked up, so a value that isn't
+	//  set is not looked up (and logged) again on every call
+	private volatile boolean keyStorePasswordRead;
+	private volatile boolean keyStoreFileNameRead;
 
 	//  null means "not configured yet", the 'secure' property is read the first time isSecure() is called.
 	private volatile Boolean secure;
@@ -164,14 +168,16 @@ public class SecureBaseObject extends BaseObject {
 	 */
 	public SSLContext getSSLContext() throws IOException {
 
-		if( sslContext == null ) {
+		SSLContext ret = sslContext;
+		if( ret == null ) {
 			synchronized(this) {
-				if( sslContext == null ) {
+				ret = sslContext;
+				if( ret == null ) {
 					SSLContext tmp;
 					try {
 						tmp = SSLContext.getInstance(getProtocol());
 						tmp.init(getKeyManagers(), getTrustManagers() , getSecureRandom());
-						sslContext = tmp;
+						sslContext = ret = tmp;
 
 					} catch (GeneralSecurityException | IOException | RuntimeException e) {
 						//  Not Throwable: an Error (OutOfMemoryError, say) must not be turned into an IOException
@@ -181,7 +187,9 @@ public class SecureBaseObject extends BaseObject {
 			}
 		}
 
-		return sslContext;
+		//  Return the value read or built here, not the field: a setter (or resetSecurityContext) that
+		//  ran after the lock was released could have set the field to null again.
+		return ret;
 
 	}
 
@@ -236,18 +244,26 @@ public class SecureBaseObject extends BaseObject {
 	 */
 	public KeyManager[] getKeyManagers() throws KeyStoreException, NoSuchAlgorithmException, UnrecoverableKeyException, CertificateException, IOException {
 
-		if( keyManagers == null ) {
+		KeyManager[] ret = keyManagers;
+		if( ret == null ) {
 			synchronized(this) {
-				if( keyManagers == null ) {
+				ret = keyManagers;
+				if( ret == null ) {
 					char[] passphrase = null;
 					String tmp = getKeyStorePassword();
 
 					if( tmp != null ) {
 						passphrase = tmp.toCharArray();	
-						KeyStore ks = getKeyStore(passphrase); 
-						KeyManagerFactory kmf = getKeyManagerFactory() ;		
-						kmf.init(ks, passphrase);
-						keyManagers = kmf.getKeyManagers();
+						try {
+							KeyStore ks = getKeyStore(passphrase); 
+							KeyManagerFactory kmf = getKeyManagerFactory() ;		
+							kmf.init(ks, passphrase);
+							keyManagers = ret = kmf.getKeyManagers();
+						} finally {
+							//  The KeyStore and KeyManagerFactory keep what they need (the factory copies the
+							//  password), so don't leave another copy of the password in memory.
+							java.util.Arrays.fill(passphrase, '\0');
+						}
 					} else {
 						logDebug("No password defined. No KeyManagers availible (may be okay for a clinet).");
 					}
@@ -255,7 +271,9 @@ public class SecureBaseObject extends BaseObject {
 			}
 		}
 
-		return keyManagers;
+		//  Return the value read or built here, not the field: a setter (or resetSecurityContext) that
+		//  ran after the lock was released could have set the field to null again.
+		return ret;
 	}
 
 	/**
@@ -264,15 +282,19 @@ public class SecureBaseObject extends BaseObject {
 	 * @throws NoSuchAlgorithmException
 	 */
 	public KeyManagerFactory getKeyManagerFactory() throws NoSuchAlgorithmException {
-		if( keyManagerFactory == null ) {
+		KeyManagerFactory ret = keyManagerFactory;
+		if( ret == null ) {
 			synchronized(this) {
-				if( keyManagerFactory == null ) {
-					keyManagerFactory = KeyManagerFactory.getInstance(getAlgorithm()) ;
+				ret = keyManagerFactory;
+				if( ret == null ) {
+					keyManagerFactory = ret = KeyManagerFactory.getInstance(getAlgorithm()) ;
 				}
 			}
 		}
 
-		return keyManagerFactory;
+		//  Return the value read or built here, not the field: a setter (or resetSecurityContext) that
+		//  ran after the lock was released could have set the field to null again.
+		return ret;
 	}
 
 
@@ -293,9 +315,11 @@ public class SecureBaseObject extends BaseObject {
 	public KeyStore getKeyStore(char[] passphrase) throws IOException {
 
 
-		if( keyStore == null ) {
+		KeyStore ret = keyStore;
+		if( ret == null ) {
 			synchronized(this) {
-				if( keyStore == null ) {
+				ret = keyStore;
+				if( ret == null ) {
 
 					try {
 
@@ -329,7 +353,7 @@ public class SecureBaseObject extends BaseObject {
 							ks.load(in, passphrase);
 						}
 
-						keyStore = ks;
+						keyStore = ret = ks;
 					} catch ( KeyStoreException | NoSuchAlgorithmException | CertificateException e) {
 						throw new IOException(e);
 					}
@@ -338,7 +362,9 @@ public class SecureBaseObject extends BaseObject {
 			}
 		}
 
-		return keyStore;
+		//  Return the value read or built here, not the field: a setter (or resetSecurityContext) that
+		//  ran after the lock was released could have set the field to null again.
+		return ret;
 	}
 
 
@@ -347,12 +373,15 @@ public class SecureBaseObject extends BaseObject {
 	 */
 	public String getKeyStorePassword() {
 
-		if( keyStorePassword == null ) {
+		if( !keyStorePasswordRead ) {
 			synchronized (this) {
-				if( keyStorePassword == null ) {
-					keyStorePassword = getProperty(PROPERTY_PASS_PHRASE);
-					//  Never log the password itself
-					logDebug(PROPERTY_PASS_PHRASE+(keyStorePassword == null ? " is not defined":" is defined"));
+				if( !keyStorePasswordRead ) {
+					if( keyStorePassword == null ) {
+						keyStorePassword = getProperty(PROPERTY_PASS_PHRASE);
+						//  Never log the password itself
+						logDebug(PROPERTY_PASS_PHRASE+(keyStorePassword == null ? " is not defined":" is defined"));
+					}
+					keyStorePasswordRead = true;
 				}
 			}
 		}
@@ -368,6 +397,8 @@ public class SecureBaseObject extends BaseObject {
 	 */
 	public synchronized void setKeyStorePassword(String keyStorePassword) {
 		this.keyStorePassword = keyStorePassword;
+		//  null: look the property up again, as before
+		keyStorePasswordRead = keyStorePassword != null;
 		keyStore = null;
 		keyManagers = null;
 		resetSecurityContext();
@@ -377,11 +408,14 @@ public class SecureBaseObject extends BaseObject {
 	 * @return the name of the KeyStore file.
 	 */
 	public String getKeyStoreFileName() {
-		if( keyStoreFileName == null ) {
+		if( !keyStoreFileNameRead ) {
 			synchronized (this) {
-				if( keyStoreFileName == null ) {
-					keyStoreFileName = getProperty(PROPERTY_KEY_STORE_NAME);	
-					logDebug(PROPERTY_KEY_STORE_NAME+"="+keyStoreFileName);
+				if( !keyStoreFileNameRead ) {
+					if( keyStoreFileName == null ) {
+						keyStoreFileName = getProperty(PROPERTY_KEY_STORE_NAME);	
+						logDebug(PROPERTY_KEY_STORE_NAME+"="+keyStoreFileName);
+					}
+					keyStoreFileNameRead = true;
 				}
 			}
 		}
@@ -449,6 +483,8 @@ public class SecureBaseObject extends BaseObject {
 	 */
 	public synchronized void setKeyStoreFileName(String keyStore) {
 		this.keyStoreFileName = keyStore;
+		//  null: look the property up again, as before
+		keyStoreFileNameRead = keyStore != null;
 		this.keyStore = null;
 		keyManagers = null;
 		resetSecurityContext();

@@ -352,19 +352,24 @@ public abstract class AbstractCoreServer extends BaseThread  {
 	 * @throws IOException
 	 */
 	public ServerSocketFactory getServerSocketFactory() throws IOException {
-		if( factory == null ) {
+		ServerSocketFactory ret = factory;
+		if( ret == null ) {
 			synchronized(this) {
-				if( factory == null ) {
+				ret = factory;
+				if( ret == null ) {
 					if( isSecure() ) {
-						factory = getSSLContext().getServerSocketFactory();						
+						ret = getSSLContext().getServerSocketFactory();						
 					} else {
-						factory = ServerSocketFactory.getDefault();
+						ret = ServerSocketFactory.getDefault();
 					}
+					factory = ret;
 				}
 			}
 		}
 		
-		return factory;
+		//  Return the value read or built here, not the field: resetSecurityContext that
+		//  ran after the lock was released could have set the field to null again.
+		return ret;
 	}
 
 	/**

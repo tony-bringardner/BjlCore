@@ -124,20 +124,25 @@ public class SocketClient extends SecureBaseObject {
 	 * @throws IOException
 	 */
 	public SocketFactory getSocketFactory() throws KeyManagementException, CertificateException, FileNotFoundException, KeyStoreException, NoSuchAlgorithmException, UnrecoverableKeyException, IOException {
-		if( factory == null ) {
+		SocketFactory ret = factory;
+		if( ret == null ) {
 			synchronized(this) {
-				if( factory == null ) {
+				ret = factory;
+				if( ret == null ) {
 					if( isSecure() ) {
 						SSLSocketFactory sf = getSSLContext().getSocketFactory();
-						factory = isVerifyHostname() ? TlsSockets.hostnameVerifying(sf) : sf;
+						ret = isVerifyHostname() ? TlsSockets.hostnameVerifying(sf) : sf;
 					} else {
-						factory = SocketFactory.getDefault();
+						ret = SocketFactory.getDefault();
 					}
+					factory = ret;
 				}
 			}
 		}
 
-		return factory;
+		//  Return the value read or built here, not the field: setVerifyHostname or resetSecurityContext that
+		//  ran after the lock was released could have set the field to null again.
+		return ret;
 	}
 
 	/**
