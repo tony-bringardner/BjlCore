@@ -31,6 +31,16 @@
   made in a patch release because no BJL project uses it: code that called these methods should use
   `getClass()` or `getName()` instead.
 
+### Added
+
+- `util.Hex`: hex encoding (lower or upper case, optional separator such as `:` for fingerprints)
+  and decoding. `java.util.HexFormat` needs Java 17; this replaces `String.format("%02x")` loops in
+  bjl_dns, bjl_email, bjl_file_system_sftp and bjl_net_framework.
+- `NamedThreadFactory`: named daemon threads for executors (`name`, `name-2` ..., or
+  `NamedThreadFactory.numbered("prefix")` for `prefix1`, `prefix2` ...), optionally non-daemon or
+  virtual (Java 21+). Replaces the hand-written thread factories in bjl_dns, bjl_email and bjl_net_framework.
+
+
 ## 1.3.0
 
 ### Added
