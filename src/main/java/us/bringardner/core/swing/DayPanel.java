@@ -49,7 +49,7 @@ import javax.swing.JPanel;
 import javax.swing.JTextField;
 import javax.swing.border.LineBorder;
 
-public class DayPanel extends JPanel implements ComponentId {
+public class DayPanel extends JPanel {
 
 	private static final long serialVersionUID = 1L;
 	public static final String PROP_DAY = "Calendar.Day";
@@ -200,18 +200,5 @@ public class DayPanel extends JPanel implements ComponentId {
 		 comp.setPreferredSize(new Dimension(22,24));
 		return comp;
 	}
-
-
-	@Override
-	public String getComponentName() {
-		return "DayPanel";
-	}
-
-	@Override
-	public int getComponentId() {
-		return DAY_PANEL_ID;
-	}
-
-
 
 }

@@ -51,7 +51,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
-public class TimePanel extends JPanel implements ComponentId {
+public class TimePanel extends JPanel {
 
 
 	private static final long serialVersionUID = 1L;
@@ -447,14 +447,4 @@ public class TimePanel extends JPanel implements ComponentId {
 		
 	}
 
-	@Override
-	public String getComponentName() {
-		
-		return "TimePanel";
-	}
-
-	@Override
-	public int getComponentId() {
-		return TIME_PANEL_ID;
-	}
 }

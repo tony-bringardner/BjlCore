@@ -49,7 +49,7 @@ import javax.swing.JPanel;
 /**
  * Graphical implementation of an analog clock
  */
-public class Clock extends JPanel implements MouseListener, MouseMotionListener ,ComponentId {
+public class Clock extends JPanel implements MouseListener, MouseMotionListener {
 	
 	private static final long serialVersionUID = 1L;
 	private static final double PI = Math.PI;
@@ -599,18 +599,6 @@ public class Clock extends JPanel implements MouseListener, MouseMotionListener 
 	 */
 	public int getMilliSeconds() {
 		return milliSeconds;
-	}
-
-
-	@Override
-	public String getComponentName() {
-		return "Clock";
-	}
-
-
-	@Override
-	public int getComponentId() {
-		return CLOCK_ID;
 	}
 
 	

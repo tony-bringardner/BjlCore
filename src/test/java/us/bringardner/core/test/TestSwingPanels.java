@@ -28,7 +28,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import us.bringardner.core.swing.Clock;
-import us.bringardner.core.swing.ComponentId;
 import us.bringardner.core.swing.DatePanel;
 import us.bringardner.core.swing.DateTimeCombo;
 import us.bringardner.core.swing.DayPanel;
@@ -101,8 +100,6 @@ public class TestSwingPanels {
 		assertEquals(Color.BLUE, clock.getClockForground());
 		assertEquals(Color.GRAY, clock.getShadowColor());
 
-		assertEquals("Clock", clock.getComponentName());
-		assertEquals(ComponentId.CLOCK_ID, clock.getComponentId());
 
 		//  the default constructor uses the current time
 		assertTrue(new Clock().getHour() >= 1);
@@ -149,8 +146,6 @@ public class TestSwingPanels {
 		panel.setHour(99);
 		assertEquals(23, panel.getHour(), "Hours are limited to 23");
 
-		assertEquals("TimePanel", panel.getComponentName());
-		assertEquals(ComponentId.TIME_PANEL_ID, panel.getComponentId());
 	}
 
 	@Test
@@ -339,8 +334,6 @@ public class TestSwingPanels {
 		mouse(days.get(3), MouseEvent.MOUSE_EXITED);
 		assertNull(days.get(3).getBorder());
 
-		assertEquals("DayPanel", panel.getComponentName());
-		assertEquals(ComponentId.DAY_PANEL_ID, panel.getComponentId());
 	}
 
 	@Test
@@ -358,8 +351,6 @@ public class TestSwingPanels {
 		assertEquals(20, cal.get(Calendar.DAY_OF_MONTH));
 		assertEquals(Calendar.FEBRUARY, cal.get(Calendar.MONTH));
 
-		assertEquals("Date Panel", panel.getComponentName());
-		assertEquals(ComponentId.DATE_PANEL_ID, panel.getComponentId());
 	}
 
 	@Test

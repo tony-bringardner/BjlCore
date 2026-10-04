@@ -44,7 +44,7 @@ import javax.swing.JSpinner;
  *
  * @author  Tony Bringardner
  */
-public class DatePanel extends javax.swing.JPanel implements ComponentId {
+public class DatePanel extends javax.swing.JPanel {
 
 	private static final long serialVersionUID = 1L;
 	public static final String PROP_DATE_CHANGED = "DateChanged";
@@ -184,16 +184,5 @@ public class DatePanel extends javax.swing.JPanel implements ComponentId {
 		Date newValue = cal.getTime();
 		firePropertyChange(PROP_DATE_CHANGED, oldValue, newValue);
 	}
-
-	@Override
-	public String getComponentName() {
-		return "Date Panel";
-	}
-
-	@Override
-	public int getComponentId() {
-		return DATE_PANEL_ID;
-	}
-
 
 }

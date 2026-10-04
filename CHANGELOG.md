@@ -22,7 +22,16 @@
   for again, so setting it later (as a system property, say) has no effect on that object. Call
   `setKeyStorePassword` / `setKeyStoreFileName`; setting null looks the property up again.
 
-## 1.3.0 (unreleased)
+### Removed
+
+- `us.bringardner.core.swing.ComponentId`, and `getComponentName()` / `getComponentId()` on `Clock`,
+  `DatePanel`, `DayPanel` and `TimePanel`. It only gave the Swing components a fixed name and number for
+  tests, and nothing else used it; tests find components by `Component.getName()`, which the components
+  have set since 1.2.0 (for example `hourSpinner`, `todayButton`, `day1`). Strictly an incompatible change,
+  made in a patch release because no BJL project uses it: code that called these methods should use
+  `getClass()` or `getName()` instead.
+
+## 1.3.0
 
 ### Added
 
