@@ -7,6 +7,7 @@ import java.util.Collections;
 
 import javax.net.ssl.SNIHostName;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
@@ -18,8 +19,9 @@ import javax.net.ssl.SSLSocketFactory;
  *
  * {@link #layer} puts TLS on a connected socket (STARTTLS, FTP's AUTH TLS ...),
  * {@link #configureClient} applies the client settings (SNI and host name verification) to an
- * SSLSocket before its handshake, and {@link #hostnameVerifying} wraps a factory so every
- * socket it makes verifies the host name.
+ * SSLSocket (or SSLEngine, for non-blocking connections) before its handshake,
+ * {@link #clientEngine} makes a client SSLEngine set up that way, and {@link #hostnameVerifying}
+ * wraps a factory so every socket it makes verifies the host name.
  *
  * Host name verification is the HTTPS check (RFC 2818 / RFC 6125): the server's certificate must
  * have been issued for the host being connected to. Without it any certificate the trust managers
@@ -88,14 +90,59 @@ public final class TlsSockets {
 	 *  host can't quietly turn the check off
 	 */
 	public static void configureClient(SSLSocket socket, String host, boolean verifyHostname) {
+		SSLParameters params = clientParameters(socket.getSSLParameters(), host, verifyHostname);
+		if( params != null ) {
+			socket.setSSLParameters(params);
+		}
+	}
+
+	/**
+	 * Apply the client settings to an SSLEngine before its handshake, the same as
+	 * {@link #configureClient(SSLSocket, String, boolean)} does for a socket.
+	 *
+	 * @param engine a client mode SSLEngine (before the handshake)
+	 * @param host the host being connected to (may be null: then neither is set)
+	 * @param verifyHostname true to check that the server's certificate was issued for host
+	 * @throws IllegalArgumentException if verifyHostname is true and host is null
+	 */
+	public static void configureClient(SSLEngine engine, String host, boolean verifyHostname) {
+		SSLParameters params = clientParameters(engine.getSSLParameters(), host, verifyHostname);
+		if( params != null ) {
+			engine.setSSLParameters(params);
+		}
+	}
+
+	/**
+	 * A client SSLEngine for a non-blocking connection to host:port, set up by
+	 * {@link #configureClient(SSLEngine, String, boolean)}. The host and port also let the
+	 * context resume an earlier session with the same server.
+	 *
+	 * @param ctx the SSLContext to use
+	 * @param host the host being connected to (may be null when verifyHostname is false)
+	 * @param port the port being connected to (ignored without a host)
+	 * @param verifyHostname true to check that the server's certificate was issued for host
+	 * @return a client mode engine, before its handshake
+	 * @throws IllegalArgumentException if verifyHostname is true and host is null
+	 */
+	public static SSLEngine clientEngine(SSLContext ctx, String host, int port, boolean verifyHostname) {
+		String name = host == null ? null : host.trim();
+		SSLEngine ret = (name == null || name.isEmpty()) ? ctx.createSSLEngine() : ctx.createSSLEngine(name, port);
+		ret.setUseClientMode(true);
+		configureClient(ret, host, verifyHostname);
+		return ret;
+	}
+
+	/**
+	 * @return params with SNI and the host name check set, or null if there is no host (nothing to set)
+	 */
+	private static SSLParameters clientParameters(SSLParameters params, String host, boolean verifyHostname) {
 		if( host == null || host.trim().isEmpty() ) {
 			if( verifyHostname ) {
 				throw new IllegalArgumentException("A host name is needed to verify the server's certificate");
 			}
-			return;
+			return null;
 		}
 		host = host.trim();
-		SSLParameters params = socket.getSSLParameters();
 		if( verifyHostname ) {
 			params.setEndpointIdentificationAlgorithm("HTTPS");
 		}
@@ -106,7 +153,7 @@ public final class TlsSockets {
 				//  Not a valid SNI name (e.g. it has an underscore): connect without SNI
 			}
 		}
-		socket.setSSLParameters(params);
+		return params;
 	}
 
 	/**

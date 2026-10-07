@@ -33,6 +33,10 @@
 
 ### Added
 
+- `TlsSockets.configureClient(SSLEngine, host, verifyHostname)` and
+  `TlsSockets.clientEngine(ctx, host, port, verifyHostname)`: the same client settings (SNI, host
+  name check) for non-blocking connections that use an SSLEngine instead of an SSLSocket, used by
+  bjl_net_framework's NIO framework.
 - `util.Hex`: hex encoding (lower or upper case, optional separator such as `:` for fingerprints)
   and decoding. `java.util.HexFormat` needs Java 17; this replaces `String.format("%02x")` loops in
   bjl_dns, bjl_email, bjl_file_system_sftp and bjl_net_framework.

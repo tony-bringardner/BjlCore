@@ -1,6 +1,8 @@
 package us.bringardner.core.test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -14,7 +16,9 @@ import java.net.Socket;
 import java.nio.file.Files;
 import java.util.concurrent.TimeUnit;
 
+import javax.net.ssl.SNIHostName;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
@@ -179,6 +183,32 @@ public class TestTlsSockets {
 			//  Without the check a missing host is fine
 			TlsSockets.configureClient(tls, null, false);
 		}
+	}
+
+	@Test
+	public void testClientEngine() throws Exception {
+		SSLContext ctx = SSLContext.getInstance("TLS");
+		ctx.init(null, null, null);
+
+		SSLEngine engine = TlsSockets.clientEngine(ctx, " localhost ", 443, true);
+		assertTrue(engine.getUseClientMode());
+		assertEquals("localhost", engine.getPeerHost());
+		assertEquals(443, engine.getPeerPort());
+		assertEquals("HTTPS", engine.getSSLParameters().getEndpointIdentificationAlgorithm());
+		assertEquals(new SNIHostName("localhost"), engine.getSSLParameters().getServerNames().get(0));
+
+		// An address: the host name check, but no SNI (RFC 6066 doesn't allow addresses)
+		engine = TlsSockets.clientEngine(ctx, "127.0.0.1", 443, true);
+		assertEquals("HTTPS", engine.getSSLParameters().getEndpointIdentificationAlgorithm());
+		assertTrue(engine.getSSLParameters().getServerNames() == null || engine.getSSLParameters().getServerNames().isEmpty());
+
+		engine = TlsSockets.clientEngine(ctx, "localhost", 443, false);
+		assertNull(engine.getSSLParameters().getEndpointIdentificationAlgorithm());
+
+		assertThrows(IllegalArgumentException.class, () -> TlsSockets.clientEngine(ctx, null, 443, true));
+		engine = TlsSockets.clientEngine(ctx, null, 443, false);
+		assertNull(engine.getPeerHost());
+		assertFalse(engine.getNeedClientAuth());
 	}
 
 	@Test
